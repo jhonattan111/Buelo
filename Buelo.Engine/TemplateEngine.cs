@@ -1,19 +1,26 @@
-﻿using Buelo.Contracts;
+using Buelo.Contracts;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
 using Microsoft.CodeAnalysis.Scripting;
 using System.Collections.Concurrent;
 using System.Dynamic;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace Buelo.Engine;
 
-public class TemplateEngine
+public class TemplateEngine(IHelperRegistry helpers)
 {
     private readonly ConcurrentDictionary<string, IReport> _cache = new();
 
-    public async Task<byte[]> RenderAsync(string template, object data)
+    /// <summary>
+    /// Renders a template from a raw string.
+    /// </summary>
+    public async Task<byte[]> RenderAsync(string template, object data, TemplateMode mode = TemplateMode.FullClass)
     {
-        var hash = ComputeHash(template);
+        string code = mode == TemplateMode.Builder ? WrapBuilderTemplate(template) : template;
+
+        var hash = ComputeHash(code);
 
         if (!_cache.TryGetValue(hash, out var report))
         {
@@ -31,28 +38,48 @@ public class TemplateEngine
                     "Buelo.Contracts"
                 );
 
-            string code = template + "\nreturn new Report();";
+            string scriptCode = code + "\nreturn new Report();";
 
-            report = await CSharpScript.EvaluateAsync<IReport>(code, options);
+            report = await CSharpScript.EvaluateAsync<IReport>(scriptCode, options);
             _cache[hash] = report;
         }
-
-
 
         ReportContext context = new()
         {
             Data = ConvertToDynamic(data),
-            Helpers = new DefaultHelperRegistry(),
+            Helpers = helpers,
             Globals = new Dictionary<string, object>()
         };
 
         return report.GenerateReport(context);
     }
 
+    /// <summary>
+    /// Renders a persisted <see cref="TemplateRecord"/> using the supplied data.
+    /// The template's <see cref="TemplateRecord.Mode"/> controls how the source is interpreted.
+    /// </summary>
+    public Task<byte[]> RenderTemplateAsync(TemplateRecord template, object data)
+        => RenderAsync(template.Template, data, template.Mode);
+
     private static string ComputeHash(string input)
     {
-        return input.GetHashCode().ToString();
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
+        return Convert.ToHexString(bytes);
     }
+
+    /// <summary>
+    /// Wraps a Builder-mode expression inside the boilerplate class that implements <see cref="IReport"/>.
+    /// Inside the expression the variables <c>ctx</c>, <c>data</c>, and <c>helpers</c> are available.
+    /// </summary>
+    internal static string WrapBuilderTemplate(string body) => $@"public class Report : IReport
+{{
+    public byte[] GenerateReport(ReportContext ctx)
+    {{
+        var data = ctx.Data;
+        var helpers = ctx.Helpers;
+        return {body};
+    }}
+}}";
 
     public static object ConvertToDynamic(object data)
     {
