@@ -17,6 +17,7 @@ Buelo is an ASP.NET Core API that accepts **C# template code** at runtime, compi
 5. [Technology Recommendation for Persistence](#technology-recommendation-for-persistence)
 6. [Step-by-Step: Migrating to PostgreSQL](#step-by-step-migrating-to-postgresql)
 7. [Step-by-Step: Creating a Test Project](#step-by-step-creating-a-test-project)
+8. [Step-by-Step: Creating Automated CI/CD](#step-by-step-creating-automated-cicd)
 
 ---
 
@@ -512,6 +513,89 @@ public class TemplateEngineTests
 
 ```bash
 dotnet test Buelo.slnx --collect:"XPlat Code Coverage"
+```
+
+---
+
+## Step-by-Step: Creating Automated CI/CD
+
+This task creates an automated pipeline that validates every push and pull request by restoring packages, building, running tests, and checking formatting.
+
+### 1. Create the workflow file
+
+Create `.github/workflows/ci.yml` with the content below.
+
+```yaml
+name: CI
+
+on:
+        push:
+                branches: [master]
+        pull_request:
+                branches: [master]
+
+jobs:
+        validate:
+                runs-on: ubuntu-latest
+
+                steps:
+                        - name: Checkout
+                            uses: actions/checkout@v4
+
+                        - name: Setup .NET
+                            uses: actions/setup-dotnet@v4
+                            with:
+                                    dotnet-version: 10.0.x
+
+                        - name: Restore
+                            run: dotnet restore Buelo.slnx
+
+                        - name: Build (Release)
+                            run: dotnet build Buelo.slnx --configuration Release --no-restore
+
+                        - name: Validate formatting
+                            run: dotnet format Buelo.slnx --verify-no-changes --verbosity diagnostic
+
+                        - name: Run tests with coverage
+                            run: dotnet test Buelo.slnx --configuration Release --no-build --collect:"XPlat Code Coverage"
+
+                        - name: Upload test and coverage artifacts
+                            if: always()
+                            uses: actions/upload-artifact@v4
+                            with:
+                                    name: test-results
+                                    path: |
+                                            **/TestResults/**
+                                            **/coverage.cobertura.xml
+```
+
+### 2. What this pipeline validates
+
+- Project restores successfully (`dotnet restore`)
+- Solution compiles (`dotnet build`)
+- Code style/format is valid (`dotnet format --verify-no-changes`)
+- Automated tests pass (`dotnet test`)
+- Test and coverage outputs are archived as workflow artifacts
+
+### 3. Optional CD task (deploy after validation)
+
+After CI is green, add a second job (`deploy`) with `needs: validate` to publish and deploy the API.
+
+Typical steps:
+
+- `dotnet publish Buelo.Api -c Release -o ./publish`
+- Deploy to your target (Azure Web App, container registry + Kubernetes, Railway, etc.)
+- Keep deploy secrets in GitHub Secrets (never in `appsettings.json`)
+
+### 4. Local command parity (same checks as CI)
+
+Run the same validations locally before opening a PR:
+
+```bash
+dotnet restore Buelo.slnx
+dotnet build Buelo.slnx -c Release --no-restore
+dotnet format Buelo.slnx --verify-no-changes
+dotnet test Buelo.slnx -c Release --no-build --collect:"XPlat Code Coverage"
 ```
 
 ---
