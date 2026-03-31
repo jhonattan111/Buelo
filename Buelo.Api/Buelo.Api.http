@@ -1,0 +1,12 @@
+@Buelo.Api_HostAddress = http://localhost:5238/api
+
+POST {{Buelo.Api_HostAddress}}/report/render
+{
+  "template": "using QuestPDF.Fluent;\nusing QuestPDF.Helpers;\nusing QuestPDF.Infrastructure;\nusing Buelo.Contracts;\n\npublic class Report : IReport\n{\n    public byte[] Generate(ReportContext ctx)\n    {\n        var data = ctx.Data;\n\n        return Document.Create(container =>\n        {\n            container.Page(page =>\n            {\n                page.Margin(20);\n\n                page.Header()\n                    .Text(\"Buelo Test Report\")\n                    .FontSize(18)\n                    .Bold()\n                    .AlignCenter();\n\n                page.Content().Column(col =>\n                {\n                    col.Spacing(10);\n\n                    col.Item().Text($\"Name: {data.name}\");\n                    col.Item().Text($\"Amount: {ctx.Helpers.FormatCurrency((decimal)data.amount)}\");\n                    col.Item().Text($\"Date: {ctx.Helpers.FormatDate((DateTime)data.date)}\");\n\n                    col.Item().LineHorizontal(1);\n\n                    col.Item().Text(\"Generated dynamically via .csx\")\n                        .Italic()\n                        .FontSize(10);\n                });\n\n                page.Footer()\n                    .AlignCenter()\n                    .Text(x =>\n                    {\n                        x.Span(\"Page \");\n                        x.CurrentPageNumber();\n                    });\n            });\n        }).GeneratePdf();\n    }\n}",
+  "data": {
+    "name": "John",
+    "amount": 1200,
+    "date": "2026-01-01T00:00:00"
+  }
+}
+###
