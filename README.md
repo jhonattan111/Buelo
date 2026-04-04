@@ -16,6 +16,8 @@ Buelo is an ASP.NET Core API that accepts **C# template code** at runtime, compi
    - [Feature 4 – Custom Helper Registries](#feature-4--custom-helper-registries)
 5. [Technology Recommendation for Persistence](#technology-recommendation-for-persistence)
 6. [Step-by-Step: Migrating to PostgreSQL](#step-by-step-migrating-to-postgresql)
+7. [Step-by-Step: Creating a Test Project](#step-by-step-creating-a-test-project)
+8. [Step-by-Step: Creating Automated CI/CD](#step-by-step-creating-automated-cicd)
 
 ---
 
@@ -416,6 +418,184 @@ builder.Services.AddBueloEngine();
 ```bash
 dotnet ef migrations add InitialCreate --project Buelo.Engine --startup-project Buelo.Api
 dotnet ef database update --project Buelo.Engine --startup-project Buelo.Api
+```
+
+---
+
+## Step-by-Step: Creating a Test Project
+
+This section shows how to create a test project and cover the main methods in the current codebase.
+
+### 1. Create the test project and add it to the solution
+
+```bash
+dotnet new xunit -n Buelo.Tests
+dotnet sln Buelo.slnx add Buelo.Tests/Buelo.Tests.csproj
+```
+
+### 2. Add project references
+
+```bash
+dotnet add Buelo.Tests reference Buelo.Engine
+dotnet add Buelo.Tests reference Buelo.Contracts
+dotnet add Buelo.Tests reference Buelo.Api
+```
+
+### 3. Add useful testing packages
+
+```bash
+dotnet add Buelo.Tests package FluentAssertions
+dotnet add Buelo.Tests package Moq
+dotnet add Buelo.Tests package Microsoft.AspNetCore.Mvc.Testing
+dotnet add Buelo.Tests package coverlet.collector
+```
+
+### 4. Suggested folder structure
+
+```text
+Buelo.Tests/
+    Engine/
+        TemplateEngineTests.cs
+        InMemoryTemplateStoreTests.cs
+    Api/
+        ReportControllerTests.cs
+        TemplatesControllerTests.cs
+    Integration/
+        RenderEndpointsTests.cs
+```
+
+### 5. Main methods to cover
+
+| Area | Class | Method | What to validate |
+|------|-------|--------|------------------|
+| Engine | `TemplateEngine` | `RenderAsync` | Returns PDF bytes for `FullClass` and `Builder` modes; invalid template raises compilation error |
+| Engine | `TemplateEngine` | `RenderTemplateAsync` | Uses `TemplateRecord.Mode` and renders with provided data |
+| Engine | `TemplateEngine` | `ConvertToDynamic` / `JsonElementToExpando` | Converts JSON payload into dynamic object preserving primitive values and object structure |
+| Store | `InMemoryTemplateStore` | `SaveAsync` | Assigns `Id` when empty and updates `UpdatedAt` on update |
+| Store | `InMemoryTemplateStore` | `GetAsync` / `ListAsync` / `DeleteAsync` | CRUD flow and delete return value when item does not exist |
+| API | `ReportController` | `Render` | Returns file response and default filename when request fileName is empty |
+| API | `ReportController` | `RenderById` | Returns `NotFound` for unknown id and uses template defaults when request is null |
+| API | `ReportController` | `Preview` | Returns `BadRequest` when `MockData` is null and file response when configured |
+| API | `TemplatesController` | `List` / `Get` / `Create` / `Update` / `Delete` | HTTP status codes and payloads for success and not-found scenarios |
+
+### 6. Example: starter test for TemplateEngine
+
+```csharp
+using Buelo.Contracts;
+using Buelo.Engine;
+using FluentAssertions;
+
+namespace Buelo.Tests.Engine;
+
+public class TemplateEngineTests
+{
+        [Fact]
+        public async Task RenderAsync_BuilderMode_ShouldGeneratePdfBytes()
+        {
+                // Arrange
+                var engine = new TemplateEngine(new DefaultHelperRegistry());
+                var template = "Document.Create(c => c.Page(p => p.Content().Text((string)data.name))).GeneratePdf()";
+
+                // Act
+                var result = await engine.RenderAsync(
+                        template,
+                        new { name = "Test" },
+                        TemplateMode.Builder);
+
+                // Assert
+                result.Should().NotBeNull();
+                result.Should().NotBeEmpty();
+        }
+}
+```
+
+### 7. Run all tests
+
+```bash
+dotnet test Buelo.slnx --collect:"XPlat Code Coverage"
+```
+
+---
+
+## Step-by-Step: Creating Automated CI/CD
+
+This task creates an automated pipeline that validates every push and pull request by restoring packages, building, running tests, and checking formatting.
+
+### 1. Create the workflow file
+
+Create `.github/workflows/ci.yml` with the content below.
+
+```yaml
+name: CI
+
+on:
+        push:
+                branches: [master]
+        pull_request:
+                branches: [master]
+
+jobs:
+        validate:
+                runs-on: ubuntu-latest
+
+                steps:
+                        - name: Checkout
+                            uses: actions/checkout@v4
+
+                        - name: Setup .NET
+                            uses: actions/setup-dotnet@v4
+                            with:
+                                    dotnet-version: 10.0.x
+
+                        - name: Restore
+                            run: dotnet restore Buelo.slnx
+
+                        - name: Build (Release)
+                            run: dotnet build Buelo.slnx --configuration Release --no-restore
+
+                        - name: Validate formatting
+                            run: dotnet format Buelo.slnx --verify-no-changes --verbosity diagnostic
+
+                        - name: Run tests with coverage
+                            run: dotnet test Buelo.slnx --configuration Release --no-build --collect:"XPlat Code Coverage"
+
+                        - name: Upload test and coverage artifacts
+                            if: always()
+                            uses: actions/upload-artifact@v4
+                            with:
+                                    name: test-results
+                                    path: |
+                                            **/TestResults/**
+                                            **/coverage.cobertura.xml
+```
+
+### 2. What this pipeline validates
+
+- Project restores successfully (`dotnet restore`)
+- Solution compiles (`dotnet build`)
+- Code style/format is valid (`dotnet format --verify-no-changes`)
+- Automated tests pass (`dotnet test`)
+- Test and coverage outputs are archived as workflow artifacts
+
+### 3. Optional CD task (deploy after validation)
+
+After CI is green, add a second job (`deploy`) with `needs: validate` to publish and deploy the API.
+
+Typical steps:
+
+- `dotnet publish Buelo.Api -c Release -o ./publish`
+- Deploy to your target (Azure Web App, container registry + Kubernetes, Railway, etc.)
+- Keep deploy secrets in GitHub Secrets (never in `appsettings.json`)
+
+### 4. Local command parity (same checks as CI)
+
+Run the same validations locally before opening a PR:
+
+```bash
+dotnet restore Buelo.slnx
+dotnet build Buelo.slnx -c Release --no-restore
+dotnet format Buelo.slnx --verify-no-changes
+dotnet test Buelo.slnx -c Release --no-build --collect:"XPlat Code Coverage"
 ```
 
 ---
