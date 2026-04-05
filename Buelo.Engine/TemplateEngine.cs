@@ -18,7 +18,8 @@ public class TemplateEngine(IHelperRegistry helpers)
     /// </summary>
     public async Task<byte[]> RenderAsync(string template, object data, TemplateMode mode = TemplateMode.FullClass)
     {
-        string code = mode == TemplateMode.Builder ? WrapBuilderTemplate(template) : template;
+        var effectiveMode = ResolveTemplateMode(template, mode);
+        string code = effectiveMode == TemplateMode.Builder ? WrapBuilderTemplate(template) : template;
 
         var hash = ComputeHash(code);
 
@@ -52,6 +53,32 @@ public class TemplateEngine(IHelperRegistry helpers)
         };
 
         return report.GenerateReport(context);
+    }
+
+    /// <summary>
+    /// Resolves the mode used by the compiler.
+    /// When <paramref name="mode"/> is not explicitly Builder, a lightweight heuristic
+    /// enables fluent QuestPDF snippets to be sent without wrapper boilerplate.
+    /// </summary>
+    private static TemplateMode ResolveTemplateMode(string template, TemplateMode mode)
+    {
+        if (mode == TemplateMode.Builder)
+            return TemplateMode.Builder;
+
+        return IsFullClassTemplate(template) ? TemplateMode.FullClass : TemplateMode.Builder;
+    }
+
+    private static bool IsFullClassTemplate(string template)
+    {
+        if (string.IsNullOrWhiteSpace(template))
+            return false;
+
+        var normalized = template.Trim();
+
+        return normalized.Contains(" class ", StringComparison.Ordinal)
+               || normalized.StartsWith("class ", StringComparison.Ordinal)
+               || normalized.Contains("IReport", StringComparison.Ordinal)
+               || normalized.Contains("GenerateReport(", StringComparison.Ordinal);
     }
 
     /// <summary>

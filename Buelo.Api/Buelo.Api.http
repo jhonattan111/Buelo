@@ -4,7 +4,7 @@ POST {{Buelo.Api_HostAddress}}/report/render
 Content-Type: application/json
 
 {
-  "template": "public class Report : IReport { public byte[] GenerateReport(ReportContext ctx) { var data = ctx.Data; return Document.Create(c => c.Page(p => p.Content().Text((string)data.name)).Bold()).GeneratePdf(); } }",
+  "template": "Document.Create(c => c.Page(p => p.Content().Text((string)data.name)).Bold()).GeneratePdf()",
   "fileName": "hello.pdf",
   "data": { "name": "World" }
 }
