@@ -2,4 +2,5 @@
   <Project Path="Buelo.Api/Buelo.Api.csproj" />
   <Project Path="Buelo.Contracts/Buelo.Contracts.csproj" Id="b98bb84a-753f-4ad7-9aaa-3f534a4891b2" />
   <Project Path="Buelo.Engine/Buelo.Engine.csproj" Id="146ca144-1083-4f75-90ae-e00c919afe03" />
+  <Project Path="Buelo.Tests/Buelo.Tests.csproj" Id="9497e230-0349-4e96-b821-e3fd4f605dc5" />
 </Solution>
