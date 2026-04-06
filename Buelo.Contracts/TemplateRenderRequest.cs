@@ -17,4 +17,10 @@ public class TemplateRenderRequest
     /// If <c>null</c>, <see cref="TemplateRecord.DefaultFileName"/> is used.
     /// </summary>
     public string? FileName { get; set; }
+
+    /// <summary>
+    /// Override the page configuration settings.
+    /// If <c>null</c>, the template's <see cref="TemplateRecord.PageSettings"/> is used.
+    /// </summary>
+    public PageSettings? PageSettings { get; set; }
 }

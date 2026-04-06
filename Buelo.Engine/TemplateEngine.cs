@@ -16,7 +16,7 @@ public class TemplateEngine(IHelperRegistry helpers)
     /// <summary>
     /// Renders a template from a raw string.
     /// </summary>
-    public async Task<byte[]> RenderAsync(string template, object data, TemplateMode mode = TemplateMode.FullClass)
+    public async Task<byte[]> RenderAsync(string template, object data, TemplateMode mode = TemplateMode.FullClass, PageSettings? pageSettings = null)
     {
         var effectiveMode = ResolveTemplateMode(template, mode);
         string code = effectiveMode == TemplateMode.Builder ? WrapBuilderTemplate(template) : template;
@@ -49,7 +49,8 @@ public class TemplateEngine(IHelperRegistry helpers)
         {
             Data = ConvertToDynamic(data),
             Helpers = helpers,
-            Globals = new Dictionary<string, object>()
+            Globals = new Dictionary<string, object>(),
+            PageSettings = pageSettings ?? PageSettings.Default()
         };
 
         return report.GenerateReport(context);
@@ -84,9 +85,10 @@ public class TemplateEngine(IHelperRegistry helpers)
     /// <summary>
     /// Renders a persisted <see cref="TemplateRecord"/> using the supplied data.
     /// The template's <see cref="TemplateRecord.Mode"/> controls how the source is interpreted.
+    /// Optional pageSettings override the template's configured settings; defaults to template settings if not provided.
     /// </summary>
-    public Task<byte[]> RenderTemplateAsync(TemplateRecord template, object data)
-        => RenderAsync(template.Template, data, template.Mode);
+    public Task<byte[]> RenderTemplateAsync(TemplateRecord template, object data, PageSettings? pageSettings = null)
+        => RenderAsync(template.Template, data, template.Mode, pageSettings ?? template.PageSettings);
 
     private static string ComputeHash(string input)
     {

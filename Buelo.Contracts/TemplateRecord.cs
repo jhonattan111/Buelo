@@ -38,6 +38,12 @@ public class TemplateRecord
     /// <summary>Default file name to use when no explicit name is provided at render time.</summary>
     public string DefaultFileName { get; set; } = "report.pdf";
 
+    /// <summary>
+    /// Page configuration settings for PDF layout (size, margins, colors, watermark, etc).
+    /// These settings are used when rendering this template.
+    /// </summary>
+    public PageSettings PageSettings { get; set; } = PageSettings.Default();
+
     /// <summary>UTC timestamp when the template was first saved.</summary>
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 

@@ -37,6 +37,33 @@ public class ReportControllerTests
     }
 
     [Fact]
+    public async Task Render_WithCustomPageSettings_ShouldReturnPdfFile()
+    {
+        var controller = CreateController();
+        var request = new ReportRequest
+        {
+            Template = BuilderTemplate,
+            FileName = "hello.pdf",
+            Data = CreateJsonData("World"),
+            PageSettings = new PageSettings
+            {
+                PageSize = "Letter",
+                MarginHorizontal = 1.0f,
+                MarginVertical = 1.0f,
+                BackgroundColor = "#F5F5F5",
+                WatermarkText = "DRAFT"
+            }
+        };
+
+        var result = await controller.Render(request);
+
+        var file = Assert.IsType<FileContentResult>(result);
+        Assert.Equal("application/pdf", file.ContentType);
+        Assert.Equal("hello.pdf", file.FileDownloadName);
+        Assert.NotEmpty(file.FileContents);
+    }
+
+    [Fact]
     public async Task RenderById_WhenTemplateNotFound_ShouldReturnNotFound()
     {
         var controller = CreateController();
@@ -70,6 +97,35 @@ public class ReportControllerTests
     }
 
     [Fact]
+    public async Task RenderById_WithCustomPageSettings_ShouldUseOverride()
+    {
+        var store = new InMemoryTemplateStore();
+        var template = await store.SaveAsync(new TemplateRecord
+        {
+            Name = "Mock",
+            Template = BuilderTemplate,
+            Mode = TemplateMode.Builder,
+            DefaultFileName = "mock.pdf",
+            MockData = CreateJsonData("Fallback"),
+            PageSettings = PageSettings.A4Compact()
+        });
+
+        var engine = new TemplateEngine(new DefaultHelperRegistry());
+        var controller = new ReportController(engine, store);
+
+        var customSettings = new PageSettings
+        {
+            PageSize = "Letter",
+            WatermarkText = "OVERRIDE"
+        };
+
+        var result = await controller.RenderById(template.Id, new TemplateRenderRequest { PageSettings = customSettings });
+
+        var file = Assert.IsType<FileContentResult>(result);
+        Assert.NotEmpty(file.FileContents);
+    }
+
+    [Fact]
     public async Task Preview_WhenMockDataMissing_ShouldReturnBadRequest()
     {
         var store = new InMemoryTemplateStore();
@@ -87,6 +143,30 @@ public class ReportControllerTests
         var result = await controller.Preview(template.Id);
 
         Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task Preview_ShouldUseTemplatePageSettings()
+    {
+        var store = new InMemoryTemplateStore();
+        var watermarkSettings = PageSettings.WithWatermark("PREVIEW");
+
+        var template = await store.SaveAsync(new TemplateRecord
+        {
+            Name = "WithWatermark",
+            Template = BuilderTemplate,
+            Mode = TemplateMode.Builder,
+            MockData = CreateJsonData("Test"),
+            PageSettings = watermarkSettings
+        });
+
+        var engine = new TemplateEngine(new DefaultHelperRegistry());
+        var controller = new ReportController(engine, store);
+
+        var result = await controller.Preview(template.Id);
+
+        var file = Assert.IsType<FileContentResult>(result);
+        Assert.NotEmpty(file.FileContents);
     }
 
     private static ReportController CreateController()
