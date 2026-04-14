@@ -14,6 +14,7 @@ Buelo is an ASP.NET Core API that accepts **C# template code** at runtime, compi
    - [Feature 2 – Template Persistence (GUIDs)](#feature-2--template-persistence-guids)
    - [Feature 3 – Data Schema & Mock Data](#feature-3--data-schema--mock-data)
    - [Feature 4 – Custom Helper Registries](#feature-4--custom-helper-registries)
+    - [Feature 5 – Sections Mode (declarative templates)](#feature-5--sections-mode-declarative-templates)
 5. [Technology Recommendation for Persistence](#technology-recommendation-for-persistence)
 6. [Step-by-Step: Migrating to PostgreSQL](#step-by-step-migrating-to-postgresql)
 7. [Step-by-Step: Creating a Test Project](#step-by-step-creating-a-test-project)
@@ -86,7 +87,7 @@ Render a report from a template sent in the request body.
 | `template` | `string` | ✅ | C# source code for the report (see `TemplateMode` below) |
 | `fileName` | `string` | ❌ | Output file name. Default: `report.pdf` |
 | `data` | `object` | ✅ | Arbitrary JSON data available as `ctx.Data` (dynamic) |
-| `mode` | `"FullClass"` \| `"Builder"` | ❌ | How the template is interpreted. Default: `FullClass` |
+| `mode` | `"FullClass"` \| `"Builder"` \| `"Sections"` | ❌ | How the template is interpreted. Auto-detected when omitted. |
 
 ---
 
@@ -179,6 +180,82 @@ public class Report : IReport
     }
 }
 ```
+
+---
+
+### Feature 5 – Sections Mode (declarative templates)
+
+**Goal:** let authors declare a report as four named, independent blocks (page config, header, content, footer) without writing `Document.Create(...)` boilerplate. Shared fragments (e.g. company header/footer) can be imported from saved `Partial` records.
+
+#### Template Modes summary
+
+| Mode | Value | Description |
+|------|-------|-------------|
+| FullClass | `"FullClass"` | Complete C# class implementing `IReport`. Full control. |
+| Builder | `"Builder"` | Only the `return` expression of `GenerateReport`. Engine wraps the class. |
+| Sections | `"Sections"` | Four declarative blocks. Engine assembles `Document.Create`. |
+| Partial | `"Partial"` | Reusable fluent fragment imported by Sections templates via `@import`. |
+
+> If `mode` is omitted, Buelo auto-detects: `class ... IReport` => FullClass, source starting with `page =>`/`page.Header|Content|Footer(...)`/`@import` => Sections, otherwise Builder.
+
+#### Sections syntax
+
+```csharp
+// Page configuration (optional — falls back to ctx.PageSettings when omitted)
+page => {
+        page.Size(PageSizes.A4);
+        page.Margin(2, Unit.Centimetre);
+        page.PageColor(Colors.White);
+        page.DefaultTextStyle(x => x.FontSize(12));
+}
+
+// Header slot (optional)
+page.Header().Text((string)data.name).SemiBold().FontSize(20).FontColor(Colors.Blue.Medium);
+
+// Content slot (required)
+page.Content()
+        .PaddingVertical(1, Unit.Centimetre)
+        .Column(x => {
+                x.Spacing(10);
+                x.Item().Text(Placeholders.LoremIpsum());
+        });
+
+// Footer slot (optional)
+page.Footer().AlignCenter().Text(x => { x.Span("Page "); x.CurrentPageNumber(); });
+```
+
+Inside every section the variables `ctx`, `data`, and `helpers` are available.
+
+#### Importing shared fragments (`@import`)
+
+Save a reusable fragment as a `Partial` template and import by name or GUID:
+
+```http
+POST /api/templates
+Content-Type: application/json
+
+{
+    "name": "company-header",
+    "mode": "Partial",
+    "template": ".Text(\"Acme Corp\").Bold().FontSize(18);"
+}
+```
+
+```http
+POST /api/report/render
+Content-Type: application/json
+
+{
+    "mode": "Sections",
+    "data": { "month": "April" },
+    "template": "@import header from \"company-header\"\npage.Content().Text((string)data.month);"
+}
+```
+
+- Import by name: `@import header from "company-header"`
+- Import by GUID: `@import footer from "3fa85f64-5717-4562-b3fc-2c963f66afa6"`
+- If an import target is missing, Buelo falls back to the inline block for that slot.
+- If both import and inline section exist for the same slot, import takes precedence.
 
 ---
 

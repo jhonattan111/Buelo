@@ -80,4 +80,41 @@ public class TemplatesControllerTests
         var values = Assert.IsType<IEnumerable<TemplateRecord>>(ok.Value, exactMatch: false);
         Assert.Single(values);
     }
+
+    [Fact]
+    public async Task Create_SectionsModeTemplate_ShouldPersistMode()
+    {
+        var store = new InMemoryTemplateStore();
+        var controller = new TemplatesController(store);
+
+        var result = await controller.Create(new TemplateRecord
+        {
+            Name = "Sections Report",
+            Mode = TemplateMode.Sections,
+            Template = "page.Content().Text(\"hello\");"
+        });
+
+        var created = Assert.IsType<CreatedAtActionResult>(result);
+        var saved = Assert.IsType<TemplateRecord>(created.Value);
+        Assert.Equal(TemplateMode.Sections, saved.Mode);
+    }
+
+    [Fact]
+    public async Task Create_PartialTemplate_ShouldPersistModeAsPartial()
+    {
+        var store = new InMemoryTemplateStore();
+        var controller = new TemplatesController(store);
+
+        var result = await controller.Create(new TemplateRecord
+        {
+            Name = "shared-header",
+            Mode = TemplateMode.Partial,
+            Template = ".Text(\"Acme Corp\").Bold();"
+        });
+
+        var created = Assert.IsType<CreatedAtActionResult>(result);
+        var saved = Assert.IsType<TemplateRecord>(created.Value);
+        Assert.Equal(TemplateMode.Partial, saved.Mode);
+        Assert.NotEqual(Guid.Empty, saved.Id);
+    }
 }

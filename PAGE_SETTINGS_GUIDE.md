@@ -112,6 +112,48 @@ var request = new ReportRequest
 var response = await client.PostAsJsonAsync("/api/report/render", request);
 ```
 
+### 2.1 Sections Mode com fallback para PageSettings
+
+No modo `Sections`, se o bloco `page => { ... }` for omitido, o engine aplica
+automaticamente `ctx.PageSettings` (tamanho, margens e fonte padrão). Você só
+declara header/body/footer de forma fluente.
+
+```csharp
+const string sectionsTemplate = @"
+@import header from ""company-header""
+
+page.Content()
+    .PaddingVertical(1, Unit.Centimetre)
+    .Column(x =>
+    {
+        x.Spacing(8);
+        x.Item().Text((string)data.name);
+        x.Item().Text(""Relatório gerado em modo Sections"");
+    });
+
+page.Footer()
+    .AlignCenter()
+    .Text(x => { x.Span(""Página ""); x.CurrentPageNumber(); });
+";
+
+var request = new ReportRequest
+{
+    Template = sectionsTemplate,
+    Mode = TemplateMode.Sections,
+    Data = new { name = "Relatório Comercial" },
+    PageSettings = new PageSettings
+    {
+        PageSize = "Letter",
+        MarginHorizontal = 1.5f,
+        MarginVertical = 2.0f,
+        DefaultFontSize = 11
+    }
+};
+```
+
+Se quiser sobrescrever visualmente as configurações de página dentro do próprio
+template, inclua o bloco `page => { ... }` explicitamente.
+
 ### 3. FullClass Template com PageSettings
 
 ```csharp

@@ -210,7 +210,6 @@ PageSettings.Default() → Usar esse (A4, 2cm margens)
 ### Criados:
 - `Buelo.Contracts/PageSettings.cs` — Nova classe com todas as configurações
 - `PAGE_SETTINGS_GUIDE.md` — Documentação completa
-- `Buelo.Examples/PageConfigurationExamples.cs` — Exemplos práticos
 - `Buelo.Tests/Engine/PageSettingsExamples.cs` — Templates de exemplo
 - `Buelo.Tests/Engine/PageSettingsEngineTests.cs` — Testes unitários
 

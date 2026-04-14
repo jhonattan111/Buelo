@@ -9,9 +9,21 @@ using System.Text.Json;
 
 namespace Buelo.Engine;
 
-public class TemplateEngine(IHelperRegistry helpers)
+public class TemplateEngine
 {
+    private readonly IHelperRegistry _helpers;
+    private readonly ITemplateStore? _store;
     private readonly ConcurrentDictionary<string, IReport> _cache = new();
+
+    /// <summary>
+    /// Creates a <see cref="TemplateEngine"/> with an optional template store.
+    /// The store is required for resolving <c>@import</c> directives in Sections-mode templates.
+    /// </summary>
+    public TemplateEngine(IHelperRegistry helpers, ITemplateStore? store = null)
+    {
+        _helpers = helpers;
+        _store = store;
+    }
 
     /// <summary>
     /// Renders a template from a raw string.
@@ -19,7 +31,14 @@ public class TemplateEngine(IHelperRegistry helpers)
     public async Task<byte[]> RenderAsync(string template, object data, TemplateMode mode = TemplateMode.FullClass, PageSettings? pageSettings = null)
     {
         var effectiveMode = ResolveTemplateMode(template, mode);
-        string code = effectiveMode == TemplateMode.Builder ? WrapBuilderTemplate(template) : template;
+
+        string code = effectiveMode switch
+        {
+            TemplateMode.Builder => WrapBuilderTemplate(template),
+            TemplateMode.Sections => await WrapSectionsTemplateAsync(template, _store),
+            TemplateMode.Partial => throw new InvalidOperationException("Partial templates are reusable fragments and cannot be rendered directly."),
+            _ => template   // FullClass: use as-is
+        };
 
         var hash = ComputeHash(code);
 
@@ -48,7 +67,7 @@ public class TemplateEngine(IHelperRegistry helpers)
         ReportContext context = new()
         {
             Data = ConvertToDynamic(data),
-            Helpers = helpers,
+            Helpers = _helpers,
             Globals = new Dictionary<string, object>(),
             PageSettings = pageSettings ?? PageSettings.Default()
         };
@@ -57,19 +76,23 @@ public class TemplateEngine(IHelperRegistry helpers)
     }
 
     /// <summary>
-    /// Resolves the mode used by the compiler.
-    /// When <paramref name="mode"/> is not explicitly Builder, a lightweight heuristic
-    /// enables fluent QuestPDF snippets to be sent without wrapper boilerplate.
+    /// Resolves the effective <see cref="TemplateMode"/> for a given source string.
+    /// Explicit non-default modes are respected as-is; <see cref="TemplateMode.FullClass"/>
+    /// triggers auto-detection via lightweight heuristics.
     /// </summary>
-    private static TemplateMode ResolveTemplateMode(string template, TemplateMode mode)
+    internal static TemplateMode ResolveTemplateMode(string template, TemplateMode mode)
     {
-        if (mode == TemplateMode.Builder)
-            return TemplateMode.Builder;
+        // Explicit non-auto modes are used as declared.
+        if (mode == TemplateMode.Builder || mode == TemplateMode.Sections || mode == TemplateMode.Partial)
+            return mode;
 
-        return IsFullClassTemplate(template) ? TemplateMode.FullClass : TemplateMode.Builder;
+        // Auto-detect from source content.
+        if (IsFullClassTemplate(template)) return TemplateMode.FullClass;
+        if (SectionsTemplateParser.IsSectionsTemplate(template)) return TemplateMode.Sections;
+        return TemplateMode.Builder;
     }
 
-    private static bool IsFullClassTemplate(string template)
+    internal static bool IsFullClassTemplate(string template)
     {
         if (string.IsNullOrWhiteSpace(template))
             return false;
@@ -85,7 +108,7 @@ public class TemplateEngine(IHelperRegistry helpers)
     /// <summary>
     /// Renders a persisted <see cref="TemplateRecord"/> using the supplied data.
     /// The template's <see cref="TemplateRecord.Mode"/> controls how the source is interpreted.
-    /// Optional pageSettings override the template's configured settings; defaults to template settings if not provided.
+    /// Optional <paramref name="pageSettings"/> override the template's stored settings.
     /// </summary>
     public Task<byte[]> RenderTemplateAsync(TemplateRecord template, object data, PageSettings? pageSettings = null)
         => RenderAsync(template.Template, data, template.Mode, pageSettings ?? template.PageSettings);
@@ -109,6 +132,131 @@ public class TemplateEngine(IHelperRegistry helpers)
         return {body};
     }}
 }}";
+
+    /// <summary>
+    /// Assembles a Sections-mode source into a compilable <see cref="IReport"/> class.
+    /// Resolves any <c>@import</c> directives against <paramref name="store"/> (by GUID first,
+    /// then by name).  If the store is <c>null</c> or a target cannot be found, the import
+    /// is silently skipped and the inline block for that slot is used instead.
+    /// When no inline page-configuration block is present, a fallback using
+    /// <c>ctx.PageSettings</c> is emitted automatically.
+    /// </summary>
+    internal static async Task<string> WrapSectionsTemplateAsync(string source, ITemplateStore? store)
+    {
+        var imports = SectionsTemplateParser.ParseImports(source);
+
+        // Resolve imported partial bodies keyed by slot.
+        var importedBodies = new Dictionary<SectionSlot, string>();
+        if (store != null)
+        {
+            foreach (var import in imports)
+            {
+                var partial = await ResolvePartialAsync(import.Target, store);
+                if (partial != null)
+                    importedBodies[import.Slot] = partial.Template;
+            }
+        }
+
+        string stripped = SectionsTemplateParser.StripDirectives(source);
+        string? pageConfig = SectionsTemplateParser.ParsePageConfig(stripped);
+
+        // Per-slot: imported body takes precedence over inline block.
+        string? GetBodyForSlot(SectionSlot slot)
+        {
+            if (importedBodies.TryGetValue(slot, out var imported)) return imported;
+            return SectionsTemplateParser.ParseSection(stripped, slot);
+        }
+
+        string? headerDecorated = DecorateSlot(SectionSlot.Header, GetBodyForSlot(SectionSlot.Header), importedBodies);
+        string? contentDecorated = DecorateSlot(SectionSlot.Content, GetBodyForSlot(SectionSlot.Content), importedBodies);
+        string? footerDecorated = DecorateSlot(SectionSlot.Footer, GetBodyForSlot(SectionSlot.Footer), importedBodies);
+
+        var sb = new StringBuilder();
+        sb.AppendLine("public class Report : IReport");
+        sb.AppendLine("{");
+        sb.AppendLine("    public byte[] GenerateReport(ReportContext ctx)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var data    = ctx.Data;");
+        sb.AppendLine("        var helpers = ctx.Helpers;");
+        sb.AppendLine("        static PageSize GetPageSize(string size) => size.ToUpper() switch");
+        sb.AppendLine("        {");
+        sb.AppendLine("            \"LETTER\" => QuestPDF.Helpers.PageSizes.Letter,");
+        sb.AppendLine("            \"LEGAL\"  => QuestPDF.Helpers.PageSizes.Legal,");
+        sb.AppendLine("            \"A3\"     => QuestPDF.Helpers.PageSizes.A3,");
+        sb.AppendLine("            \"A5\"     => QuestPDF.Helpers.PageSizes.A5,");
+        sb.AppendLine("            _        => QuestPDF.Helpers.PageSizes.A4");
+        sb.AppendLine("        };");
+        sb.AppendLine("        return Document.Create(container =>");
+        sb.AppendLine("        {");
+        sb.AppendLine("            container.Page(page =>");
+        sb.AppendLine("            {");
+
+        if (!string.IsNullOrWhiteSpace(pageConfig))
+        {
+            // Emit user-supplied page config block body.
+            foreach (var line in pageConfig.Split('\n'))
+                sb.AppendLine($"                {line.TrimEnd()}");
+        }
+        else
+        {
+            // Auto-fallback: apply ctx.PageSettings.
+            sb.AppendLine("                page.Size(GetPageSize(ctx.PageSettings.PageSize));");
+            sb.AppendLine("                page.MarginHorizontal(ctx.PageSettings.MarginHorizontal, Unit.Centimetre);");
+            sb.AppendLine("                page.MarginVertical(ctx.PageSettings.MarginVertical, Unit.Centimetre);");
+            sb.AppendLine("                page.DefaultTextStyle(x => x.FontSize(ctx.PageSettings.DefaultFontSize));");
+        }
+
+        if (headerDecorated != null) sb.AppendLine($"                {headerDecorated}");
+        if (contentDecorated != null) sb.AppendLine($"                {contentDecorated}");
+        if (footerDecorated != null) sb.AppendLine($"                {footerDecorated}");
+
+        sb.AppendLine("            });");
+        sb.AppendLine("        }).GeneratePdf();");
+        sb.AppendLine("    }");
+        sb.Append("}");
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Returns the statement to emit for a slot.
+    /// For imported bodies the <c>page.Slot()</c> prefix is added and a trailing <c>;</c>
+    /// appended when absent.  For inline parsed sections the statement is returned as-is.
+    /// </summary>
+    private static string? DecorateSlot(
+        SectionSlot slot,
+        string? body,
+        Dictionary<SectionSlot, string> importedBodies)
+    {
+        if (body == null) return null;
+
+        if (!importedBodies.ContainsKey(slot))
+            return body; // inline: already includes page.Slot()...;
+
+        string prefix = slot switch
+        {
+            SectionSlot.Header => "page.Header()",
+            SectionSlot.Footer => "page.Footer()",
+            _ => "page.Content()"
+        };
+
+        var trimmed = body.Trim();
+        if (!trimmed.EndsWith(';')) trimmed += ';';
+        return $"{prefix}\n                    {trimmed}";
+    }
+
+    private static async Task<TemplateRecord?> ResolvePartialAsync(string target, ITemplateStore store)
+    {
+        // Resolve by GUID first.
+        if (Guid.TryParse(target, out var id))
+            return await store.GetAsync(id);
+
+        // Resolve by name, restricting to Partial records.
+        var all = await store.ListAsync();
+        return all.FirstOrDefault(t =>
+            t.Mode == TemplateMode.Partial &&
+            t.Name.Equals(target, StringComparison.OrdinalIgnoreCase));
+    }
 
     public static object ConvertToDynamic(object data)
     {

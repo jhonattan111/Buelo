@@ -150,19 +150,64 @@ Document.Create(c =>
 ).GeneratePdf()
 ```
 
+### `Sections`
+
+The template is declared as top-level semantic blocks. The engine assembles the
+`Document.Create(...).GeneratePdf()` scaffolding automatically.
+
+Supported blocks:
+
+- Page config block: `page => { ... }` (optional)
+- Header block: `page.Header()...;` (optional)
+- Content block: `page.Content()...;` (required)
+- Footer block: `page.Footer()...;` (optional)
+
+Imports are supported at top level:
+
+```csharp
+@import header from "company-header"
+@import footer from "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+
+page => {
+    page.Size(PageSizes.A4);
+    page.Margin(2, Unit.Centimetre);
+}
+
+page.Content().Text((string)data.name);
+```
+
+Available variables in sections: `ctx`, `data` (`ctx.Data`), `helpers` (`ctx.Helpers`).
+
+### `Partial`
+
+Reusable fragment meant for import by `Sections` templates. A Partial template
+contains only the fluent chain body that follows `page.Header()`,
+`page.Content()`, or `page.Footer()`.
+
+Example:
+
+```csharp
+.Text("Acme Corp")
+.Bold()
+.FontSize(18);
+```
+
 ---
 
 ## Engine: `TemplateEngine` (Buelo.Engine)
 
 ### `RenderAsync(string template, object data, TemplateMode mode)`
 
-1. If `mode == Builder`, wraps the expression in a full class scaffolding via `WrapBuilderTemplate`.
-2. Computes a **SHA-256 hash** of the final code string.
-3. Checks the in-memory `ConcurrentDictionary<string, IReport>` cache — compiles only on cache miss.
-4. Compiles with `CSharpScript.EvaluateAsync<IReport>` (Roslyn).
-5. Converts `data` to a dynamic `ExpandoObject` via `System.Text.Json`.
-6. Builds a `ReportContext` and calls `IReport.GenerateReport(context)`.
-7. Returns raw `byte[]` (PDF).
+1. Resolves effective mode (`FullClass`, `Builder`, `Sections`, `Partial`) via `ResolveTemplateMode`.
+2. If `Builder`, wraps expression via `WrapBuilderTemplate`.
+3. If `Sections`, parses source with `SectionsTemplateParser`, resolves `@import` targets from `ITemplateStore`, and wraps via `WrapSectionsTemplateAsync`.
+4. If `FullClass`, uses source as-is.
+5. Computes a **SHA-256 hash** of the final code string.
+6. Checks the in-memory `ConcurrentDictionary<string, IReport>` cache — compiles only on cache miss.
+7. Compiles with `CSharpScript.EvaluateAsync<IReport>` (Roslyn).
+8. Converts `data` to a dynamic `ExpandoObject` via `System.Text.Json`.
+9. Builds a `ReportContext` and calls `IReport.GenerateReport(context)`.
+10. Returns raw `byte[]` (PDF).
 
 ### `RenderTemplateAsync(TemplateRecord template, object data)`
 

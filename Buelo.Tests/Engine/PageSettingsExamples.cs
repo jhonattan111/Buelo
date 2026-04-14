@@ -11,51 +11,51 @@ public static class PageSettingsExamples
     /// The page configuration (size, margins, colors, watermark) is applied automatically.
     /// </summary>
     public const string BasicTemplate = @"
-Document.Create(container => 
-{
-    container.Page(page => 
-    {
-        var settings = ctx.PageSettings;
-        
-        page.Size(GetPageSize(settings.PageSize));
-        page.Margin(settings.MarginVertical, settings.MarginHorizontal, Unit.Centimetre);
-        
-        page.Header()
-            .Text((string)data.name)
-            .SemiBold()
-            .FontSize(36)
-            .FontColor(Colors.Blue.Medium);
-        
-        page.Content()
-            .PaddingVertical(1, Unit.Centimetre)
-            .Column(x => 
+        Document.Create(container => 
+        {
+            container.Page(page => 
             {
-                x.Spacing(20);
-                x.Item().Text(Placeholders.LoremIpsum());
-                x.Item().Image(Placeholders.Image(200, 100));
-            });
+                var settings = ctx.PageSettings;
         
-        page.Footer()
-            .AlignCenter()
-            .Text(x => 
-            {
-                x.Span(""Page "");
-                x.CurrentPageNumber();
+                page.Size(GetPageSize(settings.PageSize));
+                page.Margin(settings.MarginVertical, settings.MarginHorizontal, Unit.Centimetre);
+        
+                page.Header()
+                    .Text((string)data.name)
+                    .SemiBold()
+                    .FontSize(36)
+                    .FontColor(Colors.Blue.Medium);
+        
+                page.Content()
+                    .PaddingVertical(1, Unit.Centimetre)
+                    .Column(x => 
+                    {
+                        x.Spacing(20);
+                        x.Item().Text(Placeholders.LoremIpsum());
+                        x.Item().Image(Placeholders.Image(200, 100));
+                    });
+        
+                page.Footer()
+                    .AlignCenter()
+                    .Text(x => 
+                    {
+                        x.Span(""Page "");
+                        x.CurrentPageNumber();
+                    });
             });
-    });
-}).GeneratePdf();
+        }).GeneratePdf();
 
-// Helper method to convert PageSettings size to QuestPDF PageSize
-static PageSize GetPageSize(string size) => size.ToUpper() switch
-{
-    ""LETTER"" => PageSizes.Letter,
-    ""LEGAL"" => PageSizes.Legal,
-    ""A3"" => PageSizes.A3,
-    ""A4"" => PageSizes.A4,
-    ""A5"" => PageSizes.A5,
-    _ => PageSizes.A4
-};
-";
+        // Helper method to convert PageSettings size to QuestPDF PageSize
+        static PageSize GetPageSize(string size) => size.ToUpper() switch
+        {
+            ""LETTER"" => PageSizes.Letter,
+            ""LEGAL"" => PageSizes.Legal,
+            ""A3"" => PageSizes.A3,
+            ""A4"" => PageSizes.A4,
+            ""A5"" => PageSizes.A5,
+            _ => PageSizes.A4
+        };
+    ";
 
     /// <summary>
     /// FullClass template with watermark support using PageSettings.
