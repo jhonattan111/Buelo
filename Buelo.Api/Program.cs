@@ -11,6 +11,16 @@ builder.Services.AddOpenApi();
 
 builder.Services.AddBueloEngine();
 
+builder.Services.AddCors(opt =>
+{
+    opt.AddPolicy("default", policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
+});
+
 var app = builder.Build();
 
 
@@ -23,6 +33,8 @@ if (app.Environment.IsDevelopment())
 QuestPDF.Settings.License = LicenseType.Community;
 
 app.UseHttpsRedirection();
+
+app.UseCors("default");
 
 app.UseAuthorization();
 
