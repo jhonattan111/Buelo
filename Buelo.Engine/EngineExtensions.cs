@@ -12,7 +12,7 @@ public static class EngineExtensions
     /// Registered services:
     /// <list type="bullet">
     ///   <item><description><see cref="TemplateEngine"/> – singleton report renderer.</description></item>
-    ///   <item><description><see cref="ITemplateStore"/> → <see cref="InMemoryTemplateStore"/> – singleton template store (swap for a DB implementation for persistence).</description></item>
+    ///   <item><description><see cref="ITemplateStore"/> → <see cref="InMemoryTemplateStore"/> – singleton template store (swap for a DB or file-system implementation for persistence).</description></item>
     ///   <item><description><see cref="IHelperRegistry"/> → <see cref="DefaultHelperRegistry"/> – singleton formatting helper (override with your own implementation by registering before calling this method).</description></item>
     /// </list>
     /// </para>
@@ -20,12 +20,34 @@ public static class EngineExtensions
     public static IServiceCollection AddBueloEngine(this IServiceCollection services)
     {
         // Allow callers to register their own IHelperRegistry before calling AddBueloEngine().
-        // TryAddSingleton only registers if no other registration exists yet.
         services.TryAddSingleton<IHelperRegistry, DefaultHelperRegistry>();
 
-        services.AddSingleton<ITemplateStore, InMemoryTemplateStore>();
+        // TryAdd so that AddBueloFileSystemStore() (or any custom store) registered first takes precedence.
+        services.TryAddSingleton<ITemplateStore, InMemoryTemplateStore>();
         services.AddSingleton<TemplateEngine>();
         return services;
+    }
+
+    /// <summary>
+    /// Registers a <see cref="FileSystemTemplateStore"/> as the <see cref="ITemplateStore"/>
+    /// and then calls <see cref="AddBueloEngine"/> to ensure all engine services are registered.
+    /// <para>
+    /// Configure the storage root path via <c>appsettings.json</c>:
+    /// <code>{ "Buelo": { "TemplateStorePath": "/data/templates" } }</code>
+    /// Falls back to a <c>templates</c> sub-directory relative to the current working directory.
+    /// </para>
+    /// </summary>
+    public static IServiceCollection AddBueloFileSystemStore(this IServiceCollection services, string? rootPath = null)
+    {
+        services.TryAddSingleton<ITemplateStore>(sp =>
+        {
+            string path = rootPath
+                ?? sp.GetService<Microsoft.Extensions.Configuration.IConfiguration>()?["Buelo:TemplateStorePath"]
+                ?? "templates";
+            return new FileSystemTemplateStore(path);
+        });
+
+        return services.AddBueloEngine();
     }
 }
 

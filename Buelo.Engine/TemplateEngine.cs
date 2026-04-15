@@ -114,9 +114,57 @@ public class TemplateEngine
     /// Renders a persisted <see cref="TemplateRecord"/> using the supplied data.
     /// The template's <see cref="TemplateRecord.Mode"/> controls how the source is interpreted.
     /// Optional <paramref name="pageSettings"/> override the template's stored settings.
+    /// <para>
+    /// When the template header contains a <c>@data from "name"</c> directive the engine
+    /// resolves the effective data in this order:
+    /// <list type="number">
+    ///   <item>An artefact in <see cref="TemplateRecord.Artefacts"/> whose <c>Name</c> (or <c>Name+Extension</c>) matches.</item>
+    ///   <item>A cross-template lookup via <see cref="ITemplateStore.GetAsync"/> when the ref parses as a GUID.</item>
+    ///   <item>The <paramref name="data"/> argument.</item>
+    ///   <item><see cref="TemplateRecord.MockData"/>.</item>
+    /// </list>
+    /// Throws <see cref="InvalidOperationException"/> only when all four sources yield <c>null</c>.
+    /// </para>
     /// </summary>
-    public Task<byte[]> RenderTemplateAsync(TemplateRecord template, object data, PageSettings? pageSettings = null)
-        => RenderAsync(template.Template, data, template.Mode, pageSettings ?? template.PageSettings);
+    public async Task<byte[]> RenderTemplateAsync(TemplateRecord template, object? data, PageSettings? pageSettings = null)
+    {
+        object? effectiveData = data;
+
+        var effectiveMode = ResolveTemplateMode(template.Template, template.Mode);
+        if (effectiveMode == TemplateMode.Sections)
+        {
+            var (header, _) = TemplateHeaderParser.Parse(template.Template);
+            if (header.DataRef is { } dataRef)
+            {
+                // 1. Resolve from same-record artefacts.
+                var artefact = template.Artefacts.FirstOrDefault(a =>
+                    string.Equals(a.Name, dataRef, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals($"{a.Name}{a.Extension}", dataRef, StringComparison.OrdinalIgnoreCase));
+
+                if (artefact is not null)
+                {
+                    effectiveData = JsonSerializer.Deserialize<JsonElement>(artefact.Content);
+                }
+                else if (_store is not null && Guid.TryParse(dataRef, out var refId))
+                {
+                    // 2. Cross-template lookup.
+                    var refTemplate = await _store.GetAsync(refId);
+                    effectiveData = refTemplate?.MockData;
+                }
+                // else fall through to the provided data argument (step 3)
+            }
+        }
+
+        // 4. Final fallback: template's own MockData.
+        effectiveData ??= template.MockData;
+
+        if (effectiveData is null)
+            throw new InvalidOperationException(
+                "No data available for rendering. Provide data in the request, configure MockData, " +
+                "or declare @data from an artefact name in the template header.");
+
+        return await RenderAsync(template.Template, effectiveData, template.Mode, pageSettings ?? template.PageSettings);
+    }
 
     /// <summary>
     /// Compiles <paramref name="template"/> using the same wrapping pipeline as

@@ -4,7 +4,7 @@
 Introduce the concept of a **TemplateBundle** — a report is composed of multiple named artefacts (template source, mock data, data schema, helpers) stored and managed individually. The `TemplateRecord` evolves to support multi-artefact storage. A `FileSystemTemplateStore` is added as an optional persistence backend.
 
 ## Status
-`[ ] pending`
+`[x] done`
 
 ## Dependencies
 - Sprint 7 complete ✅
@@ -106,9 +106,9 @@ File: `Buelo.Tests/Engine/FileSystemTemplateStoreTests.cs`
 ---
 
 ## Acceptance Criteria
-- [ ] `TemplateRecord` has `Artefacts` list, backward compatible (empty = no artefacts)
-- [ ] Artefact CRUD endpoints functional
-- [ ] `@data from "mockdata"` resolves from same-template artefact during render
-- [ ] `FileSystemTemplateStore` passes round-trip tests
-- [ ] Export ZIP contains all artefacts; re-import restores template with artefacts intact
-- [ ] `InMemoryTemplateStore` still the default; `FileSystemTemplateStore` is opt-in
+- [x] `TemplateRecord` has `Artefacts` list, backward compatible (empty = no artefacts)
+- [x] Artefact CRUD endpoints functional
+- [x] `@data from "mockdata"` resolves from same-template artefact during render
+- [x] `FileSystemTemplateStore` passes round-trip tests
+- [x] Export ZIP contains all artefacts; re-import restores template with artefacts intact
+- [x] `InMemoryTemplateStore` still the default; `FileSystemTemplateStore` is opt-in

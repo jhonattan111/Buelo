@@ -49,4 +49,22 @@ public class TemplateRecord
 
     /// <summary>UTC timestamp of the last modification.</summary>
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    /// <summary>Named artefacts attached to this template (mock data, schemas, helpers, etc.).</summary>
+    public IList<TemplateArtefact> Artefacts { get; set; } = [];
+}
+
+/// <summary>
+/// A named file-like artefact attached to a <see cref="TemplateRecord"/>.
+/// </summary>
+public class TemplateArtefact
+{
+    /// <summary>Slug-safe name (lowercase, hyphens only), e.g. "mockdata", "schema", "helper-tax".</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>File extension including the leading dot, e.g. ".json", ".cs", ".schema.json".</summary>
+    public string Extension { get; set; } = string.Empty;
+
+    /// <summary>Text content of the artefact.</summary>
+    public string Content { get; set; } = string.Empty;
 }
