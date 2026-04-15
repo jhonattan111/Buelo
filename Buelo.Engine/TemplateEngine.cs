@@ -1,13 +1,19 @@
 using Buelo.Contracts;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
 using Microsoft.CodeAnalysis.Scripting;
 using System.Collections.Concurrent;
 using System.Dynamic;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
 namespace Buelo.Engine;
+
+// TemplateEngine intentionally references obsolete FullClass/Builder modes to maintain
+// backward-compatible runtime support while the deprecation path is in effect.
+#pragma warning disable CS0618
 
 public class TemplateEngine
 {
@@ -32,35 +38,31 @@ public class TemplateEngine
     {
         var effectiveMode = ResolveTemplateMode(template, mode);
 
+        // For Sections mode, strip header directives and apply any @settings overrides.
+        string source = template;
+        PageSettings? effectiveSettings = pageSettings;
+        if (effectiveMode == TemplateMode.Sections)
+        {
+            var (header, stripped) = TemplateHeaderParser.Parse(template);
+            source = stripped;
+            if (header.Settings is { } hs)
+                effectiveSettings = ApplyHeaderSettings(effectiveSettings ?? PageSettings.Default(), hs);
+        }
+
         string code = effectiveMode switch
         {
-            TemplateMode.Builder => WrapBuilderTemplate(template),
-            TemplateMode.Sections => await WrapSectionsTemplateAsync(template, _store),
+            TemplateMode.Builder => WrapBuilderTemplate(source),
+            TemplateMode.Sections => await WrapSectionsTemplateAsync(source, _store),
             TemplateMode.Partial => throw new InvalidOperationException("Partial templates are reusable fragments and cannot be rendered directly."),
-            _ => template   // FullClass: use as-is
+            _ => source   // FullClass: use as-is
         };
 
         var hash = ComputeHash(code);
 
         if (!_cache.TryGetValue(hash, out var report))
         {
-            ScriptOptions options = ScriptOptions.Default
-                .AddReferences(
-                    typeof(QuestPDF.Fluent.Document).Assembly,
-                    typeof(IReport).Assembly,
-                    typeof(Microsoft.CSharp.RuntimeBinder.Binder).Assembly
-                )
-                .AddImports(
-                    "System",
-                    "QuestPDF.Fluent",
-                    "QuestPDF.Helpers",
-                    "QuestPDF.Infrastructure",
-                    "Buelo.Contracts"
-                );
-
             string scriptCode = code + "\nreturn new Report();";
-
-            report = await CSharpScript.EvaluateAsync<IReport>(scriptCode, options);
+            report = await CSharpScript.EvaluateAsync<IReport>(scriptCode, BuildScriptOptions());
             _cache[hash] = report;
         }
 
@@ -68,8 +70,11 @@ public class TemplateEngine
         {
             Data = ConvertToDynamic(data),
             Helpers = _helpers,
-            Globals = new Dictionary<string, object>(),
-            PageSettings = pageSettings ?? PageSettings.Default()
+            Globals = new Dictionary<string, object>
+            {
+                ["__pageSettings"] = effectiveSettings ?? PageSettings.Default()
+            },
+            PageSettings = effectiveSettings ?? PageSettings.Default()
         };
 
         return report.GenerateReport(context);
@@ -113,10 +118,118 @@ public class TemplateEngine
     public Task<byte[]> RenderTemplateAsync(TemplateRecord template, object data, PageSettings? pageSettings = null)
         => RenderAsync(template.Template, data, template.Mode, pageSettings ?? template.PageSettings);
 
+    /// <summary>
+    /// Compiles <paramref name="template"/> using the same wrapping pipeline as
+    /// <see cref="RenderAsync"/> but skips PDF generation.
+    /// Returns a <see cref="ValidationResult"/> with <c>Valid = true</c> when the code
+    /// compiles without errors, or a list of <see cref="ValidationError"/> items otherwise.
+    /// Always returns a result — never throws.
+    /// </summary>
+    public async Task<ValidationResult> ValidateAsync(string template, TemplateMode mode = TemplateMode.FullClass)
+    {
+        var effectiveMode = ResolveTemplateMode(template, mode);
+
+        string code;
+        try
+        {
+            string source = template;
+            if (effectiveMode == TemplateMode.Sections)
+            {
+                var (_, stripped) = TemplateHeaderParser.Parse(template);
+                source = stripped;
+            }
+
+            code = effectiveMode switch
+            {
+                TemplateMode.Builder => WrapBuilderTemplate(source),
+                TemplateMode.Sections => await WrapSectionsTemplateAsync(source, _store),
+                TemplateMode.Partial => source,
+                _ => source
+            };
+        }
+        catch (Exception ex)
+        {
+            return new ValidationResult { Valid = false, Errors = [new ValidationError(ex.Message, 0, 0)] };
+        }
+
+        try
+        {
+            var scriptCode = code + "\nreturn new Report();";
+            var script = CSharpScript.Create<IReport>(scriptCode, BuildScriptOptions());
+            var diagnostics = script.Compile();
+
+            var errors = diagnostics
+                .Where(d => d.Severity == DiagnosticSeverity.Error)
+                .Select(d =>
+                {
+                    var span = d.Location.GetLineSpan();
+                    return new ValidationError(
+                        d.GetMessage(),
+                        span.StartLinePosition.Line + 1,
+                        span.StartLinePosition.Character + 1);
+                })
+                .ToList();
+
+            return new ValidationResult { Valid = errors.Count == 0, Errors = errors };
+        }
+        catch (Exception ex)
+        {
+            return new ValidationResult { Valid = false, Errors = [new ValidationError(ex.Message, 0, 0)] };
+        }
+    }
+
     private static string ComputeHash(string input)
     {
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
         return Convert.ToHexString(bytes);
+    }
+
+    private static ScriptOptions BuildScriptOptions() =>
+        ScriptOptions.Default
+            .AddReferences(
+                typeof(QuestPDF.Fluent.Document).Assembly,
+                typeof(IReport).Assembly,
+                typeof(Microsoft.CSharp.RuntimeBinder.Binder).Assembly)
+            .AddImports(
+                "System",
+                "QuestPDF.Fluent",
+                "QuestPDF.Helpers",
+                "QuestPDF.Infrastructure",
+                "Buelo.Contracts");
+
+    /// <summary>
+    /// Creates a new <see cref="PageSettings"/> by overriding fields from
+    /// <paramref name="base"/> with non-null values from <paramref name="hs"/>.
+    /// </summary>
+    private static PageSettings ApplyHeaderSettings(PageSettings @base, TemplateHeaderSettings hs)
+    {
+        float? margin = hs.Margin is not null ? ParseMarginCm(hs.Margin) : null;
+        return new PageSettings
+        {
+            PageSize = hs.Size ?? @base.PageSize,
+            MarginHorizontal = margin ?? @base.MarginHorizontal,
+            MarginVertical = margin ?? @base.MarginVertical,
+            BackgroundColor = @base.BackgroundColor,
+            WatermarkText = @base.WatermarkText,
+            WatermarkColor = @base.WatermarkColor,
+            WatermarkOpacity = @base.WatermarkOpacity,
+            WatermarkFontSize = @base.WatermarkFontSize,
+            DefaultFontSize = @base.DefaultFontSize,
+            DefaultTextColor = @base.DefaultTextColor,
+            ShowHeader = @base.ShowHeader,
+            ShowFooter = @base.ShowFooter
+        };
+    }
+
+    /// <summary>Parses a CSS-like margin value (e.g. "2cm", "1in", "20mm") into centimetres.</summary>
+    private static float ParseMarginCm(string value)
+    {
+        var v = value.Trim().ToLowerInvariant();
+        if (v.EndsWith("cm") && float.TryParse(v[..^2], NumberStyles.Float, CultureInfo.InvariantCulture, out var cm)) return cm;
+        if (v.EndsWith("in") && float.TryParse(v[..^2], NumberStyles.Float, CultureInfo.InvariantCulture, out var inch)) return inch * 2.54f;
+        if (v.EndsWith("mm") && float.TryParse(v[..^2], NumberStyles.Float, CultureInfo.InvariantCulture, out var mm)) return mm / 10.0f;
+        if (float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out var plain)) return plain;
+        return 2.0f;
     }
 
     /// <summary>

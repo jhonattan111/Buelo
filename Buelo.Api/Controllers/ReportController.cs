@@ -8,7 +8,9 @@ namespace Buelo.Api.Controllers;
 [Route("api/[controller]")]
 public class ReportController(TemplateEngine engine, ITemplateStore store) : ControllerBase
 {
-    /// <summary>Renders a report from a template supplied directly in the request body.</summary>
+    /// <summary>
+    /// Renders a report from a template supplied directly in the request body.
+    /// </summary>
     [HttpPost("render")]
     public async Task<IActionResult> Render([FromBody] ReportRequest request)
     {
@@ -16,6 +18,17 @@ public class ReportController(TemplateEngine engine, ITemplateStore store) : Con
         var pdf = await engine.RenderAsync(request.Template, request.Data, request.Mode, pageSettings);
 
         return File(pdf, "application/pdf", request.FileName);
+    }
+
+    /// <summary>
+    /// Validates a template by compiling it without generating a PDF.
+    /// Always returns <c>200 OK</c>; the <c>valid</c> field signals success or failure.
+    /// </summary>
+    [HttpPost("validate")]
+    public async Task<IActionResult> Validate([FromBody] ReportValidateRequest request)
+    {
+        var result = await engine.ValidateAsync(request.Template, request.Mode);
+        return Ok(result);
     }
 
     /// <summary>

@@ -4,7 +4,7 @@
 Establish the Buelo Report DSL as the canonical authoring model. Deprecate `FullClass` and `Builder` modes. Add support for `@data`, `@settings`, and `@schema` header directives parsed from the template source before compilation.
 
 ## Status
-`[ ] pending`
+`[x] done`
 
 ## Dependencies
 - Sprint 6 complete ✅
@@ -121,8 +121,8 @@ Cover:
 ---
 
 ## Acceptance Criteria
-- [ ] `FullClass` and `Builder` compile with `[Obsolete]` warning, still functional
-- [ ] `TemplateHeaderParser.Parse` passes all unit tests
-- [ ] `POST /api/report/validate` returns structured error list for invalid Sections templates
-- [ ] Existing `Sections` templates render identically after the stripped-source refactor
-- [ ] No breaking changes to existing API contracts
+- [x] `FullClass` and `Builder` compile with `[Obsolete]` warning, still functional
+- [x] `TemplateHeaderParser.Parse` passes all unit tests
+- [x] `POST /api/report/validate` returns structured error list for invalid Sections templates
+- [x] Existing `Sections` templates render identically after the stripped-source refactor
+- [x] No breaking changes to existing API contracts

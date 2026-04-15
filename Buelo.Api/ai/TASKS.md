@@ -7,13 +7,16 @@ Source of truth for backend sprint planning. Each sprint has its own file in `ai
 
 | Sprint | File | Goal | Status |
 |--------|------|------|--------|
-| 7 | [sprint-7-backend-dsl-foundation.md](sprints/sprint-7-backend-dsl-foundation.md) | Deprecate FullClass/Builder, header directives (@data/@settings/@schema), /validate endpoint | `[ ] pending` |
+| 6 | [sprint-6-sections-mode.md](sprints/sprint-6-sections-mode.md) | Add TemplateMode.Sections and Partial, SectionsTemplateParser, @import directive | `[x] done` |
+| 7 | [sprint-7-backend-dsl-foundation.md](sprints/sprint-7-backend-dsl-foundation.md) | Deprecate FullClass/Builder, header directives (@data/@settings/@schema), /validate endpoint | `[x] done` |
 | 8 | [sprint-8-backend-template-bundle.md](sprints/sprint-8-backend-template-bundle.md) | TemplateBundle artefacts, FileSystemTemplateStore, export/import ZIP | `[ ] pending` |
 | 9 | [sprint-9-backend-helpers-versioning.md](sprints/sprint-9-backend-helpers-versioning.md) | Dynamic @helper scripts, template versioning + restore | `[ ] pending` |
 
 ## Dependency Chain
 
 ```
+Sprint 6 (Sections Mode)
+    ↓
 Sprint 7 (DSL Foundation)
     ↓
 Sprint 8 (Template Bundle)

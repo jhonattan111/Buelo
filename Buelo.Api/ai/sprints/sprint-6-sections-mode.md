@@ -179,51 +179,51 @@ through automatically.
 
 ### Milestone 1 — Contracts & Enum
 
-- [ ] **T-01** Add `TemplateMode.Sections` to `TemplateMode.cs` with XML doc comment
-- [ ] **T-02** Add `TemplateMode.Partial` to `TemplateMode.cs` with XML doc comment
-- [ ] **T-03** Update `buelo-system.instructions.md` — add table rows for the two new modes
+- [x] **T-01** Add `TemplateMode.Sections` to `TemplateMode.cs` with XML doc comment
+- [x] **T-02** Add `TemplateMode.Partial` to `TemplateMode.cs` with XML doc comment
+- [x] **T-03** Update `buelo-system.instructions.md` — add table rows for the two new modes
 
 ### Milestone 2 — Parser
 
-- [ ] **T-04** Create `Buelo.Engine/SectionsTemplateParser.cs`
+- [x] **T-04** Create `Buelo.Engine/SectionsTemplateParser.cs`
   - `ParseImports(string source)` → `IReadOnlyList<ImportDirective>` (`Slot`, `NameOrId`)
   - `ParsePageConfig(string source)` → `string?` (lambda body or null)
   - `ParseSection(string source, string slot)` → `string?` (fluent chain after `page.Header()`, etc.)
   - `StripDirectives(string source)` → source without `@import` lines
-- [ ] **T-05** Define `ImportDirective` record: `Slot` (enum: `Header | Footer | Content`), `Target` (string)
+- [x] **T-05** Define `ImportDirective` record: `Slot` (enum: `Header | Footer | Content`), `Target` (string)
 
 ### Milestone 3 — Engine Integration
 
-- [ ] **T-06** Inject `ITemplateStore` into `TemplateEngine` constructor; update `EngineExtensions` accordingly
-- [ ] **T-07** Implement `TemplateEngine.WrapSectionsTemplate(string source, IReadOnlyList<SectionFragment> imports)` 
+- [x] **T-06** Inject `ITemplateStore` into `TemplateEngine` constructor; update `EngineExtensions` accordingly
+- [x] **T-07** Implement `TemplateEngine.WrapSectionsTemplate(string source, IReadOnlyList<SectionFragment> imports)` 
   - Resolves each `@import` target from the store (by Guid first, then by Name)
   - Substitutes import bodies into the correct slot
   - Falls back to inline blocks when no import is found for a slot
-- [ ] **T-08** Update `TemplateEngine.ResolveTemplateMode()` to detect Sections mode heuristics:
+- [x] **T-08** Update `TemplateEngine.ResolveTemplateMode()` to detect Sections mode heuristics:
   - First non-whitespace line starts with `@import`
   - OR `page =>` appears outside a nested lambda (simple `TrimStart().StartsWith("page =>")` check)
-- [ ] **T-09** Wire `WrapSectionsTemplate` into `RenderAsync` alongside `WrapBuilderTemplate`
+- [x] **T-09** Wire `WrapSectionsTemplate` into `RenderAsync` alongside `WrapBuilderTemplate`
 
 ### Milestone 4 — Tests
 
-- [ ] **T-10** `Buelo.Tests/Engine/SectionsTemplateParserTests.cs`
+- [x] **T-10** `Buelo.Tests/Engine/SectionsTemplateParserTests.cs`
   - Parse `@import` lines (valid, invalid, mixed with code)
   - Parse page config block (present / absent)
   - Parse each section (header / content / footer present / absent)
-- [ ] **T-11** `Buelo.Tests/Engine/TemplateEngineTests.cs` — add Sections-mode cases
+- [x] **T-11** `Buelo.Tests/Engine/TemplateEngineTests.cs` — add Sections-mode cases
   - Render without imports (content-only, all four sections)
   - Render with `@import header` from a stored Partial record
   - Render with `@import footer` from a stored Partial record
   - Verify inline block is replaced when the same slot is imported
-- [ ] **T-12** `Buelo.Tests/Engine/TemplateModeDetectionTests.cs`
+- [x] **T-12** `Buelo.Tests/Engine/TemplateModeDetectionTests.cs`
   - Heuristic correctly identifies Sections, Builder, FullClass sources
-- [ ] **T-13** `Buelo.Tests/Api/TemplatesControllerTests.cs` — exercise `POST /api/templates` with `Mode = Sections`
+- [x] **T-13** `Buelo.Tests/Api/TemplatesControllerTests.cs` — exercise `POST /api/templates` with `Mode = Sections`
 
 ### Milestone 5 — Docs & Cleanup
 
-- [ ] **T-14** Update `README.md` — add Sections mode to the "Template Modes" section with a full example
-- [ ] **T-15** Update `buelo-system.instructions.md` — document `SectionsTemplateParser` and import directive syntax
-- [ ] **T-16** Add a `Sections` example in `PAGE_SETTINGS_GUIDE.md` showing how `PageSettings` interacts with the page config block
+- [x] **T-14** Update `README.md` — add Sections mode to the "Template Modes" section with a full example
+- [x] **T-15** Update `buelo-system.instructions.md` — document `SectionsTemplateParser` and import directive syntax
+- [x] **T-16** Add a `Sections` example in `PAGE_SETTINGS_GUIDE.md` showing how `PageSettings` interacts with the page config block
 
 ---
 

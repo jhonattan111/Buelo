@@ -9,6 +9,7 @@ public enum TemplateMode
     /// The template is a complete C# class that implements <see cref="IReport"/>.
     /// This is the original mode and gives full control over the generated class.
     /// </summary>
+    [Obsolete("Use Sections or Partial instead. FullClass and Builder will be removed in v2.")]
     FullClass = 0,
 
     /// <summary>
@@ -23,6 +24,7 @@ public enum TemplateMode
     /// </list>
     /// </para>
     /// </summary>
+    [Obsolete("Use Sections or Partial instead. FullClass and Builder will be removed in v2.")]
     Builder = 1,
 
     /// <summary>

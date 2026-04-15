@@ -176,6 +176,45 @@ public class ReportControllerTests
         return new ReportController(engine, store);
     }
 
+    // ── Validate endpoint ─────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Validate_ValidSectionsTemplate_ReturnsValidTrue()
+    {
+        var controller = CreateController();
+        var request = new ReportValidateRequest
+        {
+            Template = "page.Content().Text(\"hello\");",
+            Mode = TemplateMode.Sections
+        };
+
+        var result = await controller.Validate(request);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var validation = Assert.IsType<ValidationResult>(ok.Value);
+        Assert.True(validation.Valid);
+        Assert.Empty(validation.Errors);
+    }
+
+    [Fact]
+    public async Task Validate_InvalidTemplate_ReturnsValidFalseWithErrors()
+    {
+        var controller = CreateController();
+        var request = new ReportValidateRequest
+        {
+            // undeclared_variable triggers CS0103 — valid slot syntax, invalid C# inside.
+            Template = "page.Content().Text(undeclared_variable);",
+            Mode = TemplateMode.Sections
+        };
+
+        var result = await controller.Validate(request);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var validation = Assert.IsType<ValidationResult>(ok.Value);
+        Assert.False(validation.Valid);
+        Assert.NotEmpty(validation.Errors);
+    }
+
     private static JsonElement CreateJsonData(string name)
     {
         var json = JsonSerializer.Serialize(new { name });
