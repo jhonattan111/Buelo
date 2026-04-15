@@ -61,78 +61,78 @@ public static class PageSettingsExamples
     /// FullClass template with watermark support using PageSettings.
     /// </summary>
     public const string FullClassWithWatermark = @"
-public class Report : IReport
-{
-    public byte[] GenerateReport(ReportContext ctx)
+    public class Report : IReport
     {
-        var data = ctx.Data;
-        var settings = ctx.PageSettings;
-        
-        return Document.Create(container => 
+        public byte[] GenerateReport(ReportContext ctx)
         {
-            container.Page(page => 
+            var data = ctx.Data;
+            var settings = ctx.PageSettings;
+        
+            return Document.Create(container => 
             {
-                page.Size(GetPageSize(settings.PageSize));
-                page.Margin(settings.MarginVertical, settings.MarginHorizontal, Unit.Centimetre);
-                
-                // Apply watermark if configured
-                if (!string.IsNullOrEmpty(settings.WatermarkText))
+                container.Page(page => 
                 {
-                    page.Background()
-                        .AlignCenter()
-                        .AlignMiddle()
-                        .Text(settings.WatermarkText)
-                        .FontSize(settings.WatermarkFontSize)
-                        .Opacity(settings.WatermarkOpacity)
-                        .FontColor(ParseColor(settings.WatermarkColor));
-                }
+                    page.Size(GetPageSize(settings.PageSize));
+                    page.Margin(settings.MarginVertical, settings.MarginHorizontal, Unit.Centimetre);
                 
-                page.Header()
-                    .Text((string)data.name)
-                    .SemiBold()
-                    .FontSize(36)
-                    .FontColor(Colors.Blue.Medium);
-                
-                page.Content()
-                    .Column(x =>
+                    // Apply watermark if configured
+                    if (!string.IsNullOrEmpty(settings.WatermarkText))
                     {
-                        x.Item().Text((string)data.description);
-                    });
+                        page.Background()
+                            .AlignCenter()
+                            .AlignMiddle()
+                            .Text(settings.WatermarkText)
+                            .FontSize(settings.WatermarkFontSize)
+                            .Opacity(settings.WatermarkOpacity)
+                            .FontColor(ParseColor(settings.WatermarkColor));
+                    }
                 
-                page.Footer()
-                    .AlignCenter()
-                    .Text($""Generated on {DateTime.Now:yyyy-MM-dd}: Page {ctx\""currentPageNumber\""}"");
-            });
-        }).GeneratePdf();
-    }
-    
-    private static PageSize GetPageSize(string size) => size.ToUpper() switch
-    {
-        ""LETTER"" => PageSizes.Letter,
-        ""A4"" => PageSizes.A4,
-        _ => PageSizes.A4
-    };
-    
-    private static Color ParseColor(string hex)
-    {
-        // Simple hex color parser
-        var color = Colors.Black;
-        try
-        {
-            if (hex.StartsWith(""#""))
-                hex = hex.Substring(1);
-            
-            if (uint.TryParse(hex, System.Globalization.NumberStyles.HexNumber, null, out uint argb))
-            {
-                color = new Color((byte)(argb >> 16), (byte)(argb >> 8), (byte)argb);
-            }
+                    page.Header()
+                        .Text((string)data.name)
+                        .SemiBold()
+                        .FontSize(36)
+                        .FontColor(Colors.Blue.Medium);
+                
+                    page.Content()
+                        .Column(x =>
+                        {
+                            x.Item().Text((string)data.description);
+                        });
+                
+                    page.Footer()
+                        .AlignCenter()
+                        .Text($""Generated on {DateTime.Now:yyyy-MM-dd}: Page {ctx\""currentPageNumber\""}"");
+                });
+            }).GeneratePdf();
         }
-        catch { }
+    
+        private static PageSize GetPageSize(string size) => size.ToUpper() switch
+        {
+            ""LETTER"" => PageSizes.Letter,
+            ""A4"" => PageSizes.A4,
+            _ => PageSizes.A4
+        };
+    
+        private static Color ParseColor(string hex)
+        {
+            // Simple hex color parser
+            var color = Colors.Black;
+            try
+            {
+                if (hex.StartsWith(""#""))
+                    hex = hex.Substring(1);
+            
+                if (uint.TryParse(hex, System.Globalization.NumberStyles.HexNumber, null, out uint argb))
+                {
+                    color = new Color((byte)(argb >> 16), (byte)(argb >> 8), (byte)argb);
+                }
+            }
+            catch { }
         
-        return color;
+            return color;
+        }
     }
-}
-";
+    ";
 
     /// <summary>
     /// Demonstrates different page size presets.

@@ -13,12 +13,14 @@ builder.Services.AddBueloEngine();
 
 builder.Services.AddCors(opt =>
 {
-    opt.AddPolicy("default", policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
+    opt.AddPolicy("default",
+        policy =>
+        {
+            policy
+            .WithOrigins("http://localhost:5173")
+            .AllowAnyMethod()
+            .AllowAnyHeader();
+        });
 });
 
 var app = builder.Build();
@@ -32,9 +34,12 @@ if (app.Environment.IsDevelopment())
 
 QuestPDF.Settings.License = LicenseType.Community;
 
-app.UseHttpsRedirection();
-
 app.UseCors("default");
+
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseAuthorization();
 

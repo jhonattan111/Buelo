@@ -9,7 +9,7 @@ public enum TemplateMode
     /// The template is a complete C# class that implements <see cref="IReport"/>.
     /// This is the original mode and gives full control over the generated class.
     /// </summary>
-    FullClass,
+    FullClass = 0,
 
     /// <summary>
     /// The template is only the return expression (body) of the <c>GenerateReport</c> method.
@@ -23,7 +23,7 @@ public enum TemplateMode
     /// </list>
     /// </para>
     /// </summary>
-    Builder,
+    Builder = 1,
 
     /// <summary>
     /// The template is composed of up to four named blocks declared at the top level:
@@ -45,7 +45,7 @@ public enum TemplateMode
     /// </list>
     /// </para>
     /// </summary>
-    Sections,
+    Sections = 2,
 
     /// <summary>
     /// The template contains only the fluent chain that follows a <c>page.Header()</c>,
@@ -56,5 +56,5 @@ public enum TemplateMode
     /// <see cref="Sections"/> templates at wrap time.
     /// </para>
     /// </summary>
-    Partial
+    Partial = 3
 }
