@@ -23,4 +23,18 @@ public interface ITemplateStore
     /// <summary>Removes the template with the given <paramref name="id"/>.</summary>
     /// <returns><c>true</c> if the template existed and was removed; <c>false</c> otherwise.</returns>
     Task<bool> DeleteAsync(Guid id);
+
+    /// <summary>
+    /// Returns all stored version snapshots for the template in ascending version order.
+    /// Returns an empty list when the implementation does not support versioning.
+    /// </summary>
+    Task<IReadOnlyList<TemplateVersion>> GetVersionsAsync(Guid id)
+        => Task.FromResult<IReadOnlyList<TemplateVersion>>([]);
+
+    /// <summary>
+    /// Returns the specific version snapshot, or <c>null</c> if not found.
+    /// Returns <c>null</c> when the implementation does not support versioning.
+    /// </summary>
+    Task<TemplateVersion?> GetVersionAsync(Guid id, int version)
+        => Task.FromResult<TemplateVersion?>(null);
 }

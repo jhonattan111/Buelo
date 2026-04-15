@@ -34,11 +34,78 @@ public class TemplateEngine
     /// <summary>
     /// Renders a template from a raw string.
     /// </summary>
-    public async Task<byte[]> RenderAsync(string template, object data, TemplateMode mode = TemplateMode.FullClass, PageSettings? pageSettings = null)
+    public Task<byte[]> RenderAsync(string template, object data, TemplateMode mode = TemplateMode.FullClass, PageSettings? pageSettings = null)
+        => RenderCoreAsync(template, data, mode, pageSettings, helperPreamble: null);
+
+    /// <summary>
+    /// Renders a persisted <see cref="TemplateRecord"/> using the supplied data.
+    /// The template's <see cref="TemplateRecord.Mode"/> controls how the source is interpreted.
+    /// Optional <paramref name="pageSettings"/> override the template's stored settings.
+    /// <para>
+    /// When the template header contains a <c>@data from "name"</c> directive the engine
+    /// resolves the effective data in this order:
+    /// <list type="number">
+    ///   <item>An artefact in <see cref="TemplateRecord.Artefacts"/> whose <c>Name</c> (or <c>Name+Extension</c>) matches.</item>
+    ///   <item>A cross-template lookup via <see cref="ITemplateStore.GetAsync"/> when the ref parses as a GUID.</item>
+    ///   <item>The <paramref name="data"/> argument.</item>
+    ///   <item><see cref="TemplateRecord.MockData"/>.</item>
+    /// </list>
+    /// Throws <see cref="InvalidOperationException"/> only when all four sources yield <c>null</c>.
+    /// </para>
+    /// <para>
+    /// Inline <c>@helper</c> directives and <c>@helper from "artefact"</c> are resolved from
+    /// <see cref="TemplateRecord.Artefacts"/> and compiled into a <c>BueloGeneratedHelpers</c>
+    /// static class available inside the template body.
+    /// </para>
+    /// </summary>
+    public async Task<byte[]> RenderTemplateAsync(TemplateRecord template, object? data, PageSettings? pageSettings = null)
+    {
+        object? effectiveData = data;
+        string? helperPreamble = null;
+
+        var effectiveMode = ResolveTemplateMode(template.Template, template.Mode);
+        if (effectiveMode == TemplateMode.Sections)
+        {
+            var (header, _) = TemplateHeaderParser.Parse(template.Template);
+
+            // Resolve data.
+            if (header.DataRef is { } dataRef)
+            {
+                var artefact = template.Artefacts.FirstOrDefault(a =>
+                    string.Equals(a.Name, dataRef, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals($"{a.Name}{a.Extension}", dataRef, StringComparison.OrdinalIgnoreCase));
+
+                if (artefact is not null)
+                {
+                    effectiveData = JsonSerializer.Deserialize<JsonElement>(artefact.Content);
+                }
+                else if (_store is not null && Guid.TryParse(dataRef, out var refId))
+                {
+                    var refTemplate = await _store.GetAsync(refId);
+                    effectiveData = refTemplate?.MockData;
+                }
+            }
+
+            // Resolve helpers.
+            helperPreamble = await BuildHelperPreambleAsync(header, template.Artefacts);
+        }
+
+        effectiveData ??= template.MockData;
+
+        if (effectiveData is null)
+            throw new InvalidOperationException(
+                "No data available for rendering. Provide data in the request, configure MockData, " +
+                "or declare @data from an artefact name in the template header.");
+
+        return await RenderCoreAsync(template.Template, effectiveData, template.Mode, pageSettings ?? template.PageSettings, helperPreamble);
+    }
+
+    // ── Core render pipeline ──────────────────────────────────────────────────
+
+    private async Task<byte[]> RenderCoreAsync(string template, object data, TemplateMode mode, PageSettings? pageSettings, string? helperPreamble)
     {
         var effectiveMode = ResolveTemplateMode(template, mode);
 
-        // For Sections mode, strip header directives and apply any @settings overrides.
         string source = template;
         PageSettings? effectiveSettings = pageSettings;
         if (effectiveMode == TemplateMode.Sections)
@@ -57,12 +124,19 @@ public class TemplateEngine
             _ => source   // FullClass: use as-is
         };
 
+        // Prepend generated helpers class (Sections mode only).
+        if (!string.IsNullOrEmpty(helperPreamble))
+            code = helperPreamble + "\n" + code;
+
         var hash = ComputeHash(code);
 
         if (!_cache.TryGetValue(hash, out var report))
         {
             string scriptCode = code + "\nreturn new Report();";
-            report = await CSharpScript.EvaluateAsync<IReport>(scriptCode, BuildScriptOptions());
+            var opts = string.IsNullOrEmpty(helperPreamble)
+                ? BuildScriptOptions()
+                : BuildScriptOptions().AddImports("static BueloGeneratedHelpers");
+            report = await CSharpScript.EvaluateAsync<IReport>(scriptCode, opts);
             _cache[hash] = report;
         }
 
@@ -108,62 +182,6 @@ public class TemplateEngine
                || normalized.StartsWith("class ", StringComparison.Ordinal)
                || normalized.Contains("IReport", StringComparison.Ordinal)
                || normalized.Contains("GenerateReport(", StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// Renders a persisted <see cref="TemplateRecord"/> using the supplied data.
-    /// The template's <see cref="TemplateRecord.Mode"/> controls how the source is interpreted.
-    /// Optional <paramref name="pageSettings"/> override the template's stored settings.
-    /// <para>
-    /// When the template header contains a <c>@data from "name"</c> directive the engine
-    /// resolves the effective data in this order:
-    /// <list type="number">
-    ///   <item>An artefact in <see cref="TemplateRecord.Artefacts"/> whose <c>Name</c> (or <c>Name+Extension</c>) matches.</item>
-    ///   <item>A cross-template lookup via <see cref="ITemplateStore.GetAsync"/> when the ref parses as a GUID.</item>
-    ///   <item>The <paramref name="data"/> argument.</item>
-    ///   <item><see cref="TemplateRecord.MockData"/>.</item>
-    /// </list>
-    /// Throws <see cref="InvalidOperationException"/> only when all four sources yield <c>null</c>.
-    /// </para>
-    /// </summary>
-    public async Task<byte[]> RenderTemplateAsync(TemplateRecord template, object? data, PageSettings? pageSettings = null)
-    {
-        object? effectiveData = data;
-
-        var effectiveMode = ResolveTemplateMode(template.Template, template.Mode);
-        if (effectiveMode == TemplateMode.Sections)
-        {
-            var (header, _) = TemplateHeaderParser.Parse(template.Template);
-            if (header.DataRef is { } dataRef)
-            {
-                // 1. Resolve from same-record artefacts.
-                var artefact = template.Artefacts.FirstOrDefault(a =>
-                    string.Equals(a.Name, dataRef, StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals($"{a.Name}{a.Extension}", dataRef, StringComparison.OrdinalIgnoreCase));
-
-                if (artefact is not null)
-                {
-                    effectiveData = JsonSerializer.Deserialize<JsonElement>(artefact.Content);
-                }
-                else if (_store is not null && Guid.TryParse(dataRef, out var refId))
-                {
-                    // 2. Cross-template lookup.
-                    var refTemplate = await _store.GetAsync(refId);
-                    effectiveData = refTemplate?.MockData;
-                }
-                // else fall through to the provided data argument (step 3)
-            }
-        }
-
-        // 4. Final fallback: template's own MockData.
-        effectiveData ??= template.MockData;
-
-        if (effectiveData is null)
-            throw new InvalidOperationException(
-                "No data available for rendering. Provide data in the request, configure MockData, " +
-                "or declare @data from an artefact name in the template header.");
-
-        return await RenderAsync(template.Template, effectiveData, template.Mode, pageSettings ?? template.PageSettings);
     }
 
     /// <summary>
@@ -225,6 +243,63 @@ public class TemplateEngine
             return new ValidationResult { Valid = false, Errors = [new ValidationError(ex.Message, 0, 0)] };
         }
     }
+
+    // ── Helper generation ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Builds a <c>BueloGeneratedHelpers</c> static class source from inline <c>@helper</c>
+    /// directives or from a <c>@helper from "artefact"</c> reference.
+    /// Returns <c>null</c> when no helpers are declared.
+    /// </summary>
+    internal static async Task<string?> BuildHelperPreambleAsync(
+        TemplateHeader header,
+        IList<TemplateArtefact> artefacts,
+        ITemplateStore? store = null)
+    {
+        // 1. Artefact-based helpers take precedence over inline ones.
+        if (header.HelperArtefactRef is { } artefactRef)
+        {
+            var artefact = artefacts.FirstOrDefault(a =>
+                string.Equals(a.Name, artefactRef, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals($"{a.Name}{a.Extension}", artefactRef, StringComparison.OrdinalIgnoreCase));
+
+            if (artefact is not null)
+                return WrapHelperClass(artefact.Content);
+
+            // Cross-template lookup when ref is a GUID.
+            if (store is not null && Guid.TryParse(artefactRef, out var refId))
+            {
+                var refTemplate = await store.GetAsync(refId);
+                var crossArtefact = refTemplate?.Artefacts.FirstOrDefault(a =>
+                    a.Extension.EndsWith(".helpers.cs", StringComparison.OrdinalIgnoreCase));
+                if (crossArtefact is not null)
+                    return WrapHelperClass(crossArtefact.Content);
+            }
+        }
+
+        // 2. Inline @helper directives.
+        if (header.Helpers.Count > 0)
+        {
+            var sb = new StringBuilder();
+            foreach (var h in header.Helpers)
+            {
+                // Infer return type as string if signature has parameters, otherwise string.
+                // Simpler approach: emit as expression-bodied static method.
+                // Signature already contains "Type name" pairs; we need to reconstruct
+                // the full method. Sprint spec shows: FormatCNPJ(string value) => expr
+                // We stored: Name="FormatCNPJ", Signature="string value", Body="value.Insert(2,\".\")"
+                sb.AppendLine($"    public static string {h.Name}({h.Signature}) => {h.Body};");
+            }
+            return WrapHelperClass(sb.ToString());
+        }
+
+        return null;
+    }
+
+    private static string WrapHelperClass(string body) =>
+        $"public static class BueloGeneratedHelpers\n{{\n{body}\n}}";
+
+    // ── Utilities ─────────────────────────────────────────────────────────────
 
     private static string ComputeHash(string input)
     {
@@ -293,6 +368,7 @@ public class TemplateEngine
         return {body};
     }}
 }}";
+
 
     /// <summary>
     /// Assembles a Sections-mode source into a compilable <see cref="IReport"/> class.

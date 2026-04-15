@@ -146,7 +146,58 @@ public class TemplatesController(ITemplateStore store) : ControllerBase
         return NoContent();
     }
 
-    // ── Export / Import ──────────────────────────────────────────────────────
+    // ── Versions ─────────────────────────────────────────────────────────────
+
+    /// <summary>Returns all version metadata (version number + timestamp) for a template.</summary>
+    [HttpGet("{id:guid}/versions")]
+    public async Task<IActionResult> ListVersions(Guid id)
+    {
+        var template = await store.GetAsync(id);
+        if (template is null)
+            return NotFound(new { error = $"Template '{id}' not found." });
+
+        var versions = await store.GetVersionsAsync(id);
+        var result = versions.Select(v => new { v.Version, v.SavedAt, v.SavedBy }).ToList();
+        return Ok(result);
+    }
+
+    /// <summary>Returns the full snapshot (template source + artefacts) for a specific version.</summary>
+    [HttpGet("{id:guid}/versions/{n:int}")]
+    public async Task<IActionResult> GetVersion(Guid id, int n)
+    {
+        var template = await store.GetAsync(id);
+        if (template is null)
+            return NotFound(new { error = $"Template '{id}' not found." });
+
+        var version = await store.GetVersionAsync(id, n);
+        if (version is null)
+            return NotFound(new { error = $"Version {n} not found for template '{id}'." });
+
+        return Ok(version);
+    }
+
+    /// <summary>
+    /// Restores the template to a historical snapshot.
+    /// The current state is saved as a new version before overwriting.
+    /// </summary>
+    [HttpPost("{id:guid}/versions/{n:int}/restore")]
+    public async Task<IActionResult> RestoreVersion(Guid id, int n)
+    {
+        var existing = await store.GetAsync(id);
+        if (existing is null)
+            return NotFound(new { error = $"Template '{id}' not found." });
+
+        var version = await store.GetVersionAsync(id, n);
+        if (version is null)
+            return NotFound(new { error = $"Version {n} not found for template '{id}'." });
+
+        existing.Template = version.Template;
+        existing.Artefacts = version.Artefacts;
+        var saved = await store.SaveAsync(existing);
+        return Ok(saved);
+    }
+
+    // ── Export / Import ───────────────────────────────────────────────────────
 
     /// <summary>
     /// Exports the template and all its artefacts as a ZIP bundle.

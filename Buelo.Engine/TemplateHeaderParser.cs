@@ -34,6 +34,10 @@ public static class TemplateHeaderParser
         @"^\s*@helper\s+(\w+)\(([^)]*)\)\s*=>\s*(.+?)\s*;?\s*$",
         RegexOptions.Compiled);
 
+    private static readonly Regex HelperArtefactRegex = new(
+        @"^\s*@helper\s+from\s+""([^""]+)""\s*$",
+        RegexOptions.Compiled);
+
     private static readonly Regex ImportRegex = new(
         @"^\s*@import\s+(header|footer|content)\s+from\s+""([^""]+)""\s*$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -52,6 +56,7 @@ public static class TemplateHeaderParser
         string? schemaInline = null;
         var importRefs = new List<string>();
         var helpers = new List<TemplateHeaderHelper>();
+        string? helperArtefactRef = null;
 
         var outputLines = new List<string>();
         bool headerDone = false;
@@ -133,6 +138,14 @@ public static class TemplateHeaderParser
                 continue; // stripped
             }
 
+            // --- @helper from "artefact-name" ---
+            m = HelperArtefactRegex.Match(trimmed);
+            if (m.Success)
+            {
+                helperArtefactRef = m.Groups[1].Value;
+                continue; // stripped
+            }
+
             // --- @helper Name(params) => expr; ---
             m = HelperRegex.Match(trimmed);
             if (m.Success)
@@ -154,7 +167,8 @@ public static class TemplateHeaderParser
             Settings = settings,
             SchemaInline = schemaInline,
             ImportRefs = importRefs,
-            Helpers = helpers
+            Helpers = helpers,
+            HelperArtefactRef = helperArtefactRef
         };
 
         return (header, string.Join('\n', outputLines));

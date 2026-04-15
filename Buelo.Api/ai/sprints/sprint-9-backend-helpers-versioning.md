@@ -4,7 +4,7 @@
 Enable per-template helper scripts (extending `IHelperRegistry` dynamically), and introduce template versioning so historical snapshots are preserved on every save. Closes the backend feature roadmap before frontend adaption sprints.
 
 ## Status
-`[ ] pending`
+`[x] done`
 
 ## Dependencies
 - Sprint 8 complete ✅
@@ -113,9 +113,9 @@ File: `Buelo.Tests/Engine/`
 ---
 
 ## Acceptance Criteria
-- [ ] Inline `@helper` functions callable inside Sections template without modifying `DefaultHelperRegistry`
-- [ ] `@helper from "artefact-name"` loads helpers from a `.helpers.cs` artefact
-- [ ] Every `SaveAsync` creates a version snapshot
-- [ ] Version history retrievable via GET endpoints
-- [ ] `POST .../restore` overwrites current template and creates a new version entry
-- [ ] `POST /api/report/render/{id}?version=N` renders historical snapshot
+- [x] Inline `@helper` functions callable inside Sections template without modifying `DefaultHelperRegistry`
+- [x] `@helper from "artefact-name"` loads helpers from a `.helpers.cs` artefact
+- [x] Every `SaveAsync` creates a version snapshot
+- [x] Version history retrievable via GET endpoints
+- [x] `POST .../restore` overwrites current template and creates a new version entry
+- [x] `POST /api/report/render/{id}?version=N` renders historical snapshot

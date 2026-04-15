@@ -10,9 +10,13 @@ namespace Buelo.Engine;
 /// Each template lives in its own sub-directory under <paramref name="root"/>:
 /// <code>
 /// {root}/{id}/
-///   template.record.json   — metadata (no Template source, no Artefacts)
-///   template.report.cs     — template source code
-///   {name}{ext}            — each artefact (e.g. mockdata.json, helper-tax.cs)
+///   template.record.json          — metadata (no Template source, no Artefacts)
+///   template.report.cs            — template source code
+///   {name}{ext}                   — each artefact (e.g. mockdata.json, helper-tax.cs)
+///   versions/
+///     1.snapshot.json             — version snapshot (Template + Artefacts)
+///     2.snapshot.json
+///     ...
 /// </code>
 /// </para>
 /// <para>Opt into this store via <c>builder.Services.AddBueloFileSystemStore()</c>.</para>
@@ -21,6 +25,7 @@ public class FileSystemTemplateStore : ITemplateStore
 {
     private const string MetaFile = "template.record.json";
     private const string SourceFile = "template.report.cs";
+    private const string VersionsDir = "versions";
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -53,6 +58,11 @@ public class FileSystemTemplateStore : ITemplateStore
         var results = new List<TemplateRecord>();
         foreach (var dir in Directory.EnumerateDirectories(_root))
         {
+            // Skip the versions sub-directory that might accidentally be enumerated in edge cases.
+            var dirName = Path.GetFileName(dir);
+            if (string.Equals(dirName, VersionsDir, StringComparison.OrdinalIgnoreCase))
+                continue;
+
             var record = await ReadRecordAsync(dir);
             if (record is not null)
                 results.Add(record);
@@ -68,6 +78,14 @@ public class FileSystemTemplateStore : ITemplateStore
             template.Id = Guid.NewGuid();
             template.CreatedAt = DateTimeOffset.UtcNow;
         }
+        else
+        {
+            // Snapshot the current state before overwriting.
+            var existing = await GetAsync(template.Id);
+            if (existing is not null)
+                await WriteVersionSnapshotAsync(template.Id, existing);
+        }
+
         template.UpdatedAt = DateTimeOffset.UtcNow;
 
         var dir = TemplateDir(template.Id);
@@ -115,9 +133,64 @@ public class FileSystemTemplateStore : ITemplateStore
         return Task.FromResult(true);
     }
 
+    /// <inheritdoc/>
+    public async Task<IReadOnlyList<TemplateVersion>> GetVersionsAsync(Guid id)
+    {
+        var versionsDir = VersionsDirPath(id);
+        if (!Directory.Exists(versionsDir))
+            return [];
+
+        var results = new List<TemplateVersion>();
+        foreach (var file in Directory.EnumerateFiles(versionsDir, "*.snapshot.json"))
+        {
+            var json = await File.ReadAllTextAsync(file);
+            var v = JsonSerializer.Deserialize<TemplateVersion>(json, JsonOpts);
+            if (v is not null)
+                results.Add(v);
+        }
+        return results.OrderBy(v => v.Version).ToList();
+    }
+
+    /// <inheritdoc/>
+    public async Task<TemplateVersion?> GetVersionAsync(Guid id, int version)
+    {
+        var file = VersionFilePath(id, version);
+        if (!File.Exists(file))
+            return null;
+
+        var json = await File.ReadAllTextAsync(file);
+        return JsonSerializer.Deserialize<TemplateVersion>(json, JsonOpts);
+    }
+
     // ── Private helpers ──────────────────────────────────────────────────────
 
     private string TemplateDir(Guid id) => Path.Combine(_root, id.ToString());
+    private string VersionsDirPath(Guid id) => Path.Combine(TemplateDir(id), VersionsDir);
+    private string VersionFilePath(Guid id, int version) => Path.Combine(VersionsDirPath(id), $"{version}.snapshot.json");
+
+    private async Task WriteVersionSnapshotAsync(Guid id, TemplateRecord existing)
+    {
+        var versionsDir = VersionsDirPath(id);
+        Directory.CreateDirectory(versionsDir);
+
+        var nextVersion = Directory.EnumerateFiles(versionsDir, "*.snapshot.json").Count() + 1;
+
+        var snapshot = new TemplateVersion
+        {
+            Version = nextVersion,
+            Template = existing.Template,
+            Artefacts = existing.Artefacts.Select(a => new TemplateArtefact
+            {
+                Name = a.Name,
+                Extension = a.Extension,
+                Content = a.Content
+            }).ToList(),
+            SavedAt = existing.UpdatedAt
+        };
+
+        var json = JsonSerializer.Serialize(snapshot, JsonOpts);
+        await File.WriteAllTextAsync(VersionFilePath(id, nextVersion), json);
+    }
 
     private static async Task<TemplateRecord?> ReadRecordAsync(string dir)
     {
@@ -136,7 +209,7 @@ public class FileSystemTemplateStore : ITemplateStore
         var srcPath = Path.Combine(dir, SourceFile);
         record.Template = File.Exists(srcPath) ? await File.ReadAllTextAsync(srcPath) : string.Empty;
 
-        // Read artefacts (every file except the two reserved ones).
+        // Read artefacts (every file except reserved ones; skip the versions sub-directory).
         foreach (var file in Directory.EnumerateFiles(dir))
         {
             var fileName = Path.GetFileName(file);

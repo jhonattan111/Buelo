@@ -119,7 +119,7 @@ public class ReportControllerTests
             WatermarkText = "OVERRIDE"
         };
 
-        var result = await controller.RenderById(template.Id, new TemplateRenderRequest { PageSettings = customSettings });
+        var result = await controller.RenderById(template.Id, null, new TemplateRenderRequest { PageSettings = customSettings });
 
         var file = Assert.IsType<FileContentResult>(result);
         Assert.NotEmpty(file.FileContents);

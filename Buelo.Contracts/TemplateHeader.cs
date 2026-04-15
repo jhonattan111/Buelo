@@ -23,10 +23,17 @@ public record TemplateHeader
     /// <summary>Inline helpers declared via <c>@helper Name(params) => expr;</c>.</summary>
     public IReadOnlyList<TemplateHeaderHelper> Helpers { get; init; } = [];
 
+    /// <summary>
+    /// Artefact name declared via <c>@helper from "name"</c>.
+    /// The artefact must have extension <c>.helpers.cs</c> and contain one or more
+    /// static method bodies that will be compiled into <c>BueloGeneratedHelpers</c>.
+    /// </summary>
+    public string? HelperArtefactRef { get; init; }
+
     /// <summary>Returns <c>true</c> when no directives were parsed.</summary>
     public bool IsEmpty =>
         DataRef is null && Settings is null && SchemaInline is null
-        && ImportRefs.Count == 0 && Helpers.Count == 0;
+        && ImportRefs.Count == 0 && Helpers.Count == 0 && HelperArtefactRef is null;
 }
 
 /// <summary>

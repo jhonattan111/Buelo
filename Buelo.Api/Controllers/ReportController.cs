@@ -34,13 +34,42 @@ public class ReportController(TemplateEngine engine, ITemplateStore store) : Con
     /// <summary>
     /// Renders a previously saved template by its GUID.
     /// The request body is optional: omit it to fall back to the template's mock data and settings.
+    /// Supply <c>?version=N</c> to render from a historical snapshot instead of the current template.
     /// </summary>
     [HttpPost("render/{id:guid}")]
-    public async Task<IActionResult> RenderById(Guid id, [FromBody] TemplateRenderRequest? request = null)
+    public async Task<IActionResult> RenderById(Guid id, [FromQuery] int? version = null, [FromBody] TemplateRenderRequest? request = null)
     {
-        var template = await store.GetAsync(id);
-        if (template is null)
-            return NotFound(new { error = $"Template '{id}' not found." });
+        TemplateRecord? template;
+
+        if (version.HasValue)
+        {
+            var snapshot = await store.GetVersionAsync(id, version.Value);
+            if (snapshot is null)
+                return NotFound(new { error = $"Version {version.Value} not found for template '{id}'." });
+
+            // Materialise snapshot into a transient TemplateRecord (inheriting metadata from current).
+            var current = await store.GetAsync(id);
+            if (current is null)
+                return NotFound(new { error = $"Template '{id}' not found." });
+
+            template = new TemplateRecord
+            {
+                Id = current.Id,
+                Name = current.Name,
+                Mode = current.Mode,
+                PageSettings = current.PageSettings,
+                DefaultFileName = current.DefaultFileName,
+                MockData = current.MockData,
+                Template = snapshot.Template,
+                Artefacts = snapshot.Artefacts
+            };
+        }
+        else
+        {
+            template = await store.GetAsync(id);
+            if (template is null)
+                return NotFound(new { error = $"Template '{id}' not found." });
+        }
 
         var data = request?.Data ?? template.MockData;
         if (data is null)
