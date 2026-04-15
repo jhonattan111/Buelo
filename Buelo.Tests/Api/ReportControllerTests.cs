@@ -10,7 +10,7 @@ namespace Buelo.Tests.Api;
 
 public class ReportControllerTests
 {
-    private const string BuilderTemplate = "Document.Create(c => c.Page(p => p.Content().Text((string)data.name))).GeneratePdf()";
+    private const string SectionsTemplate = "page.Content().Text((string)data.name);";
 
     public ReportControllerTests()
     {
@@ -23,7 +23,7 @@ public class ReportControllerTests
         var controller = CreateController();
         var request = new ReportRequest
         {
-            Template = BuilderTemplate,
+            Template = SectionsTemplate,
             FileName = "hello.pdf",
             Data = CreateJsonData("World")
         };
@@ -42,7 +42,7 @@ public class ReportControllerTests
         var controller = CreateController();
         var request = new ReportRequest
         {
-            Template = BuilderTemplate,
+            Template = SectionsTemplate,
             FileName = "hello.pdf",
             Data = CreateJsonData("World"),
             PageSettings = new PageSettings
@@ -80,8 +80,7 @@ public class ReportControllerTests
         var template = await store.SaveAsync(new TemplateRecord
         {
             Name = "Mock",
-            Template = BuilderTemplate,
-            Mode = TemplateMode.Builder,
+            Template = SectionsTemplate,
             DefaultFileName = "mock.pdf",
             MockData = CreateJsonData("Fallback")
         });
@@ -103,8 +102,7 @@ public class ReportControllerTests
         var template = await store.SaveAsync(new TemplateRecord
         {
             Name = "Mock",
-            Template = BuilderTemplate,
-            Mode = TemplateMode.Builder,
+            Template = SectionsTemplate,
             DefaultFileName = "mock.pdf",
             MockData = CreateJsonData("Fallback"),
             PageSettings = PageSettings.A4Compact()
@@ -132,8 +130,7 @@ public class ReportControllerTests
         var template = await store.SaveAsync(new TemplateRecord
         {
             Name = "NoMock",
-            Template = BuilderTemplate,
-            Mode = TemplateMode.Builder,
+            Template = SectionsTemplate,
             MockData = null
         });
 
@@ -154,8 +151,7 @@ public class ReportControllerTests
         var template = await store.SaveAsync(new TemplateRecord
         {
             Name = "WithWatermark",
-            Template = BuilderTemplate,
-            Mode = TemplateMode.Builder,
+            Template = SectionsTemplate,
             MockData = CreateJsonData("Test"),
             PageSettings = watermarkSettings
         });

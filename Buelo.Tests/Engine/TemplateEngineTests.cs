@@ -8,8 +8,7 @@ namespace Buelo.Tests.Engine;
 
 public class TemplateEngineTests
 {
-    private const string FullClassTemplate = "public class Report : IReport { public byte[] GenerateReport(ReportContext ctx) { var data = ctx.Data; return Document.Create(c => c.Page(p => p.Content().Text((string)data.name))).GeneratePdf(); } }";
-    private const string BuilderTemplate = "Document.Create(c => c.Page(p => p.Content().Text((string)data.name))).GeneratePdf()";
+    private const string SectionsTemplate = "page.Content().Text((string)data.name);";
 
     public TemplateEngineTests()
     {
@@ -17,36 +16,25 @@ public class TemplateEngineTests
     }
 
     [Fact]
-    public async Task RenderAsync_FullClassTemplate_ShouldGeneratePdfBytes()
+    public async Task RenderAsync_SectionsTemplate_ShouldGeneratePdfBytes()
     {
         var engine = new TemplateEngine(new DefaultHelperRegistry());
 
-        var pdf = await engine.RenderAsync(FullClassTemplate, CreateJsonData("World"));
+        var pdf = await engine.RenderAsync(SectionsTemplate, CreateJsonData("World"));
 
         Assert.NotNull(pdf);
         Assert.NotEmpty(pdf);
     }
 
     [Fact]
-    public async Task RenderAsync_BuilderTemplateWithoutMode_ShouldAutoDetectAndGeneratePdf()
-    {
-        var engine = new TemplateEngine(new DefaultHelperRegistry());
-
-        var pdf = await engine.RenderAsync(BuilderTemplate, CreateJsonData("World"));
-
-        Assert.NotNull(pdf);
-        Assert.NotEmpty(pdf);
-    }
-
-    [Fact]
-    public async Task RenderTemplateAsync_BuilderModeRecord_ShouldGeneratePdfBytes()
+    public async Task RenderTemplateAsync_SectionsModeRecord_ShouldGeneratePdfBytes()
     {
         var engine = new TemplateEngine(new DefaultHelperRegistry());
         var template = new TemplateRecord
         {
-            Name = "Builder",
-            Template = BuilderTemplate,
-            Mode = TemplateMode.Builder
+            Name = "Sections",
+            Template = SectionsTemplate,
+            Mode = TemplateMode.Sections
         };
 
         var pdf = await engine.RenderTemplateAsync(template, CreateJsonData("World"));

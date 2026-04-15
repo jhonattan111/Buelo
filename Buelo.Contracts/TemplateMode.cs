@@ -6,28 +6,6 @@ namespace Buelo.Contracts;
 public enum TemplateMode
 {
     /// <summary>
-    /// The template is a complete C# class that implements <see cref="IReport"/>.
-    /// This is the original mode and gives full control over the generated class.
-    /// </summary>
-    [Obsolete("Use Sections or Partial instead. FullClass and Builder will be removed in v2.")]
-    FullClass = 0,
-
-    /// <summary>
-    /// The template is only the return expression (body) of the <c>GenerateReport</c> method.
-    /// The engine automatically wraps the expression inside the required class/method scaffolding.
-    /// <para>
-    /// Inside the expression the following variables are available:
-    /// <list type="bullet">
-    ///   <item><description><c>ctx</c> – the full <see cref="ReportContext"/></description></item>
-    ///   <item><description><c>data</c> – shorthand for <c>ctx.Data</c></description></item>
-    ///   <item><description><c>helpers</c> – shorthand for <c>ctx.Helpers</c></description></item>
-    /// </list>
-    /// </para>
-    /// </summary>
-    [Obsolete("Use Sections or Partial instead. FullClass and Builder will be removed in v2.")]
-    Builder = 1,
-
-    /// <summary>
     /// The template is composed of up to four named blocks declared at the top level:
     /// an optional <c>page =&gt; { … }</c> page-configuration block, and up to three
     /// content sections identified by <c>page.Header()</c>, <c>page.Content()</c>, and
@@ -47,7 +25,7 @@ public enum TemplateMode
     /// </list>
     /// </para>
     /// </summary>
-    Sections = 2,
+    Sections = 0,
 
     /// <summary>
     /// The template contains only the fluent chain that follows a <c>page.Header()</c>,
@@ -58,5 +36,5 @@ public enum TemplateMode
     /// <see cref="Sections"/> templates at wrap time.
     /// </para>
     /// </summary>
-    Partial = 3
+    Partial = 1
 }

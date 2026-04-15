@@ -17,5 +17,5 @@ public record ValidationResult
 public class ReportValidateRequest
 {
     public string Template { get; set; } = string.Empty;
-    public TemplateMode Mode { get; set; } = TemplateMode.FullClass;
+    public TemplateMode Mode { get; set; } = TemplateMode.Sections;
 }

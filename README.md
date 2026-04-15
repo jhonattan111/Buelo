@@ -1,6 +1,6 @@
-# Buelo — Dynamic Report Generation API
+﻿# Buelo — Dynamic PDF Report Generation API
 
-Buelo is an ASP.NET Core API that accepts **C# template code** at runtime, compiles it with Roslyn, and returns a **PDF** rendered by [QuestPDF](https://www.questpdf.com/).
+Buelo is an ASP.NET Core API that compiles **C# template code at runtime** using Roslyn and returns a **PDF** rendered by [QuestPDF](https://www.questpdf.com/). Templates are authored in a declarative DSL (Sections mode), saved and versioned, enriched with artefacts, and rendered on demand.
 
 ---
 
@@ -8,17 +8,21 @@ Buelo is an ASP.NET Core API that accepts **C# template code** at runtime, compi
 
 1. [Getting Started](#getting-started)
 2. [Architecture Overview](#architecture-overview)
-3. [Current API Reference](#current-api-reference)
-4. [Improvement Roadmap](#improvement-roadmap)
-   - [Feature 1 – Builder Mode (focused templates)](#feature-1--builder-mode-focused-templates)
-   - [Feature 2 – Template Persistence (GUIDs)](#feature-2--template-persistence-guids)
-   - [Feature 3 – Data Schema & Mock Data](#feature-3--data-schema--mock-data)
-   - [Feature 4 – Custom Helper Registries](#feature-4--custom-helper-registries)
-    - [Feature 5 – Sections Mode (declarative templates)](#feature-5--sections-mode-declarative-templates)
-5. [Technology Recommendation for Persistence](#technology-recommendation-for-persistence)
-6. [Step-by-Step: Migrating to PostgreSQL](#step-by-step-migrating-to-postgresql)
-7. [Step-by-Step: Creating a Test Project](#step-by-step-creating-a-test-project)
-8. [Step-by-Step: Creating Automated CI/CD](#step-by-step-creating-automated-cicd)
+3. [Template Modes](#template-modes)
+4. [Template DSL Reference](#template-dsl-reference)
+5. [Page Settings](#page-settings)
+6. [Helper Registry](#helper-registry)
+7. [Template Store](#template-store)
+8. [API Reference](#api-reference)
+   - [Report Rendering](#report-rendering)
+   - [Templates CRUD](#templates-crud)
+   - [Artefacts](#artefacts)
+   - [Version History](#version-history)
+   - [Export / Import](#export--import)
+9. [Running Tests](#running-tests)
+10. [CI/CD](#cicd)
+11. [Technology Recommendation for Persistence](#technology-recommendation-for-persistence)
+12. [Step-by-Step: Migrating to PostgreSQL](#step-by-step-migrating-to-postgresql)
 
 ---
 
@@ -45,9 +49,8 @@ POST https://localhost:5238/api/report/render
 Content-Type: application/json
 
 {
-  "template": "public class Report : IReport { public byte[] GenerateReport(ReportContext ctx) { var data = ctx.Data; return Document.Create(c => c.Page(p => p.Content().Text((string)data.name))).GeneratePdf(); } }",
-  "fileName": "hello.pdf",
-  "data": { "name": "World" }
+  "template": "page.Content().Text((string)data.name);",
+  "data": { "name": "Hello, Buelo!" }
 }
 ```
 
@@ -58,326 +61,454 @@ Save the binary response as a `.pdf` file to view it.
 ## Architecture Overview
 
 ```
-Buelo.Contracts   – shared interfaces and models (IReport, IHelperRegistry, TemplateRecord, …)
-Buelo.Engine      – Roslyn-based template compiler + in-memory template store
-Buelo.Api         – ASP.NET Core endpoints
+Buelo.Contracts   â€“ interfaces and models (IReport, IHelperRegistry, ITemplateStore, TemplateRecord, PageSettings, â€¦)
+Buelo.Engine      â€“ Roslyn-based compiler, DSL parsers, InMemoryTemplateStore, FileSystemTemplateStore
+Buelo.Api         â€“ ASP.NET Core controllers, DI wiring, QuestPDF license bootstrap
+Buelo.Tests       â€“ xUnit test suite covering engine, store, and API layers
 ```
 
-The key flow:
+### Rendering pipeline
 
 ```
 POST /api/report/render
-  → ReportController
-    → TemplateEngine.RenderAsync()
-      → Compile template with Roslyn (cached by hash)
-      → Build ReportContext { Data, Helpers, Globals }
-      → IReport.GenerateReport(context) → byte[] (PDF)
+  â†’ ReportController
+    â†’ TemplateEngine.RenderAsync()
+      1. Parse header directives (@data, @settings, @schema, @helper, @import)
+      2. Resolve @import partials from store
+      3. Build BueloGeneratedHelpers preamble from @helper directives / artefacts
+      4. Wrap sections into a full IReport class
+      5. Compile with Roslyn CSharpScript (cached by SHA-256 of generated code)
+      6. Execute GenerateReport(context) â†’ byte[] PDF via QuestPDF
 ```
 
 ---
 
-## Current API Reference
+## Template Modes
 
-### `POST /api/report/render`
+| Mode | Enum value | Description |
+|------|-----------|-------------|
+| **Sections** | `0` (default) | Declarative DSL: up to four named blocks (page config, header, content, footer). The engine assembles `Document.Create(...)` automatically. |
+| **Partial** | `1` | Reusable fluent fragment. Not rendered directly; imported by Sections templates via `@import`. |
 
-Render a report from a template sent in the request body.
+> **Auto-detection:** if you omit `mode`, the engine inspects the source. Templates starting with `page =>`, `page.Header(`, `page.Content(`, `page.Footer(`, or `@import` are treated as **Sections**. Everything else that is explicitly set to `Partial` is treated as **Partial**.
+
+---
+
+## Template DSL Reference
+
+All directives must appear at the **top of the template** before any non-directive, non-blank line. They are stripped from the source before compilation.
+
+### `@import` — import a shared partial
+
+```
+@import header|footer|content from "name-or-guid"
+```
+
+- Resolved by GUID first, then by template name (case-insensitive, mode must be `Partial`).
+- Falls back to the inline block for that slot if the target is not found.
+- If both an `@import` and an inline block exist for the same slot, the import takes precedence.
+
+### `@settings` — page configuration
+
+```
+@settings { size: "A4"; margin: "2cm"; orientation: "Portrait"; }
+```
+
+Accepted values: `size` — `A4`, `Letter`, `Legal`, `A3`, `A5`; `margin` — e.g. `"2cm"`, `"1in"`, `"20mm"` (applied to both axes); `orientation` — `Portrait` / `Landscape`.
+
+### `@data` — artefact data reference
+
+```
+@data from "artefact-name"
+```
+
+Resolves data from the template's artefacts, then falls back to a cross-template GUID reference, then to the request data, then to MockData.
+
+### `@schema` — inline record schema
+
+```
+@schema record Invoice(string Customer, decimal Amount);
+```
+
+Declares the expected data shape for tooling/introspection. Stripped before compilation.
+
+### `@helper` — inline helper methods
+
+```
+@helper FormatTitle(string s) => s.ToUpperInvariant();
+```
+
+Generates a `BueloGeneratedHelpers` static class accessible from the template body as `BueloGeneratedHelpers.FormatTitle(...)`.
+
+```
+@helper from "artefact-name"
+```
+
+Loads helpers from a `.helpers.cs` artefact stored with the template. Takes precedence over inline `@helper` directives.
+
+### Sections syntax
+
+Inside each section the variables `ctx` (`ReportContext`), `data` (`dynamic`), and `helpers` (`IHelperRegistry`) are in scope.
+
+```csharp
+// Optional — page configuration block
+page => {
+    page.Size(PageSizes.A4);
+    page.Margin(2, Unit.Centimetre);
+    page.PageColor(Colors.White);
+    page.DefaultTextStyle(x => x.FontSize(12));
+}
+
+// Optional — header slot
+page.Header().Text((string)data.title).Bold().FontSize(18);
+
+// Required — content slot
+page.Content()
+    .PaddingVertical(1, Unit.Centimetre)
+    .Column(col => {
+        col.Spacing(10);
+        col.Item().Text((string)data.body);
+    });
+
+// Optional — footer slot
+page.Footer().AlignCenter().Text(x => {
+    x.Span("Page ");
+    x.CurrentPageNumber();
+});
+```
+
+---
+
+## Page Settings
+
+`PageSettings` controls the layout applied to every rendered page. It can be set on a `TemplateRecord` (persisted default) or overridden per request.
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `pageSize` | `"A4"` | `A4`, `Letter`, `Legal`, `A3`, `A5` |
+| `marginHorizontal` | `2.0` | Horizontal margin in centimetres |
+| `marginVertical` | `2.0` | Vertical margin in centimetres |
+| `backgroundColor` | `"#FFFFFF"` | Page background colour (hex) |
+| `defaultTextColor` | `"#000000"` | Default text colour (hex) |
+| `defaultFontSize` | `12` | Default font size (pt) |
+| `showHeader` | `true` | Whether the header slot is rendered |
+| `showFooter` | `true` | Whether the footer slot is rendered |
+| `watermarkText` | `null` | Watermark text (null = no watermark) |
+| `watermarkColor` | `"#CCCCCC"` | Watermark colour |
+| `watermarkOpacity` | `0.3` | Watermark opacity (0â€“1) |
+| `watermarkFontSize` | `60` | Watermark font size |
+
+**Static factory methods:**
+
+```csharp
+PageSettings.Default()              // A4, 2 cm margins
+PageSettings.Letter()               // Letter, ~2.54 cm margins
+PageSettings.A4Compact()            // A4, 1 cm margins
+PageSettings.WithWatermark("DRAFT") // A4, 2 cm margins + watermark
+```
+
+---
+
+## Helper Registry
+
+`IHelperRegistry` provides formatting utilities accessible as `helpers` inside every template.
+
+### Default implementation
+
+```csharp
+public class DefaultHelperRegistry : IHelperRegistry
+{
+    public string FormatCurrency(decimal value) => value.ToString("C");
+    public string FormatDate(DateTime date)     => date.ToString("dd/MM/yyyy");
+}
+```
+
+### Custom implementation
+
+```csharp
+// Register before AddBueloEngine() so TryAddSingleton is a no-op
+builder.Services.AddSingleton<IHelperRegistry, MyHelperRegistry>();
+builder.Services.AddBueloEngine();
+```
+
+```csharp
+public class MyHelperRegistry : IHelperRegistry
+{
+    private static readonly CultureInfo BrCulture = new("pt-BR");
+    public string FormatCurrency(decimal value) => value.ToString("C", BrCulture);
+    public string FormatDate(DateTime date)     => date.ToString("dd 'de' MMMM 'de' yyyy", BrCulture);
+}
+```
+
+---
+
+## Template Store
+
+### In-memory (default)
+
+Registered automatically by `AddBueloEngine()`. Thread-safe, keeps up to **20 version snapshots** per template (FIFO). Data is cleared on process restart.
+
+```csharp
+builder.Services.AddBueloEngine();
+```
+
+### File-system
+
+Persists templates to disk. Each template gets its own directory with separate files for metadata, source, artefacts, and snapshots.
+
+```
+templates/
+  {template-id}/
+    template.record.json     # metadata (id, name, mode, dataSchema, â€¦)
+    template.report.cs       # template source code
+    {artefactName}{.ext}     # one file per artefact
+    versions/
+      1.snapshot.json
+      2.snapshot.json
+```
+
+```csharp
+// Uses IConfiguration["Buelo:TemplateStorePath"] or falls back to "templates/"
+builder.Services.AddBueloFileSystemStore();
+
+// Or with an explicit path:
+builder.Services.AddBueloFileSystemStore("/data/templates");
+```
+
+Add to `appsettings.json` to configure the path via config:
+
+```json
+{
+  "Buelo": {
+    "TemplateStorePath": "/data/templates"
+  }
+}
+```
+
+---
+
+## API Reference
+
+### Report Rendering
+
+#### `POST /api/report/render`
+
+Render a template inline (not persisted).
 
 | Property | Type | Required | Description |
 |----------|------|----------|-------------|
-| `template` | `string` | ✅ | C# source code for the report (see `TemplateMode` below) |
-| `fileName` | `string` | ❌ | Output file name. Default: `report.pdf` |
-| `data` | `object` | ✅ | Arbitrary JSON data available as `ctx.Data` (dynamic) |
-| `mode` | `"FullClass"` \| `"Builder"` \| `"Sections"` | ❌ | How the template is interpreted. Auto-detected when omitted. |
+| `template` | `string` | âœ… | Template source in Sections DSL |
+| `data` | `object` | âœ… | Arbitrary JSON, available as `data` (dynamic) |
+| `fileName` | `string` | âŒ | Output file name. Default: `report.pdf` |
+| `mode` | `"Sections"` \| `"Partial"` | âŒ | Template mode. Auto-detected when omitted. |
+| `pageSettings` | `PageSettings` | âŒ | Page layout overrides |
 
----
+Returns `application/pdf`.
 
-### `POST /api/report/render/{id}`
+#### `POST /api/report/validate`
 
-Render a previously saved template by its GUID.
+Compile a template without rendering. Returns all Roslyn diagnostics.
 
 | Property | Type | Required | Description |
 |----------|------|----------|-------------|
-| `data` | `object` | ❌ | Data for the report. Falls back to `MockData` if omitted |
-| `fileName` | `string` | ❌ | Output file name. Falls back to `DefaultFileName` if omitted |
+| `template` | `string` | âœ… | Template source |
+| `mode` | `"Sections"` \| `"Partial"` | âŒ | Template mode |
+
+Response: `{ "valid": true, "errors": [] }` — always `200 OK`.
+
+#### `POST /api/report/render/{id:guid}?version={n}`
+
+Render a saved template by its GUID.
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `data` | `object` | âŒ | Render data. Falls back to template `MockData` |
+| `fileName` | `string` | âŒ | Falls back to template `DefaultFileName` |
+| `pageSettings` | `PageSettings` | âŒ | Falls back to template `PageSettings` |
+| `version` (query) | `int` | âŒ | Render a historical version snapshot |
+
+Returns `application/pdf`, `404` if unknown, `400` if no data is available.
+
+#### `POST /api/report/preview/{id:guid}`
+
+Render using the template's built-in `MockData`. Returns `400` if `MockData` is null.
 
 ---
 
-### `POST /api/report/preview/{id}`
-
-Render a saved template using its built-in `MockData`. Returns `400` if no mock data is configured.
-
----
-
-### Templates CRUD — `POST / GET / PUT / DELETE /api/templates`
+### Templates CRUD
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/templates` | List all saved templates |
 | `GET` | `/api/templates/{id}` | Get one template by GUID |
-| `POST` | `/api/templates` | Create a new template (GUID auto-assigned) |
+| `POST` | `/api/templates` | Create a template (GUID auto-assigned, `CreatedAt` set) |
 | `PUT` | `/api/templates/{id}` | Replace an existing template |
-| `DELETE` | `/api/templates/{id}` | Delete a template |
+| `DELETE` | `/api/templates/{id}` | Delete a template. Returns `204` or `404` |
+
+**`TemplateRecord` fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `Guid` | Auto-assigned on create |
+| `name` | `string` | Human-readable name |
+| `description` | `string?` | Optional description |
+| `template` | `string` | Template source code |
+| `mode` | `TemplateMode` | `Sections` or `Partial` |
+| `dataSchema` | `string?` | JSON Schema string describing the expected data shape |
+| `mockData` | `object?` | Sample data for preview and fallback |
+| `defaultFileName` | `string` | Default output file name |
+| `pageSettings` | `PageSettings` | Default page settings for this template |
+| `artefacts` | `TemplateArtefact[]` | Named file attachments |
+| `createdAt` | `DateTimeOffset` | Auto-set on first save |
+| `updatedAt` | `DateTimeOffset` | Updated on every save |
 
 ---
 
-## Improvement Roadmap
+### Artefacts
 
-### Feature 1 – Builder Mode (focused templates)
+Artefacts are named file attachments stored with a template (e.g. data files `.json`, helper code `.helpers.cs`).
 
-**Goal:** allow templates to contain *only the report body expression*, removing the boilerplate class and method declaration. The engine wraps the expression automatically.
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/templates/{id}/artefacts` | List artefact names and extensions |
+| `GET` | `/api/templates/{id}/artefacts/{name}` | Get artefact with content |
+| `PUT` | `/api/templates/{id}/artefacts/{name}` | Create or replace an artefact |
+| `DELETE` | `/api/templates/{id}/artefacts/{name}` | Delete an artefact. Returns `204` or `404` |
 
-#### How it works
-
-Set `"mode": "Builder"` in the request (or set `Mode = TemplateMode.Builder` on a `TemplateRecord`).
-
-Inside the expression you have access to:
-
-| Variable | Type | Value |
-|----------|------|-------|
-| `ctx` | `ReportContext` | Full context |
-| `data` | `dynamic` | Shorthand for `ctx.Data` |
-| `helpers` | `IHelperRegistry` | Shorthand for `ctx.Helpers` |
-
-#### Example – ad-hoc render
-
-```http
-POST /api/report/render
-Content-Type: application/json
-
-{
-  "mode": "Builder",
-  "fileName": "invoice.pdf",
-  "template": "Document.Create(c => c.Page(p => { p.Margin(20); p.Content().Column(col => { col.Item().Text($\"Customer: {data.customer}\"); col.Item().Text($\"Amount: {helpers.FormatCurrency((decimal)data.amount)}\"); }); })).GeneratePdf()",
-  "data": { "customer": "Acme Corp", "amount": 4200.00 }
-}
-```
-
-#### Example – saved template in Builder mode
-
-```http
-POST /api/templates
-Content-Type: application/json
-
-{
-  "name": "Invoice",
-  "mode": "Builder",
-  "defaultFileName": "invoice.pdf",
-  "template": "Document.Create(c => c.Page(p => p.Content().Text((string)data.customer))).GeneratePdf()",
-  "mockData": { "customer": "Acme Corp", "amount": 4200.00 }
-}
-```
-
-When `TemplateMode.Builder` is set the engine internally generates:
-
-```csharp
-public class Report : IReport
-{
-    public byte[] GenerateReport(ReportContext ctx)
-    {
-        var data    = ctx.Data;
-        var helpers = ctx.Helpers;
-        return /* your expression */;
-    }
-}
-```
+`PUT` request body: `{ "extension": ".json", "content": "..." }`
 
 ---
 
-### Feature 5 – Sections Mode (declarative templates)
+### Version History
 
-**Goal:** let authors declare a report as four named, independent blocks (page config, header, content, footer) without writing `Document.Create(...)` boilerplate. Shared fragments (e.g. company header/footer) can be imported from saved `Partial` records.
+Every `PUT /api/templates/{id}` auto-snapshots the current state before overwriting.
 
-#### Template Modes summary
-
-| Mode | Value | Description |
-|------|-------|-------------|
-| FullClass | `"FullClass"` | Complete C# class implementing `IReport`. Full control. |
-| Builder | `"Builder"` | Only the `return` expression of `GenerateReport`. Engine wraps the class. |
-| Sections | `"Sections"` | Four declarative blocks. Engine assembles `Document.Create`. |
-| Partial | `"Partial"` | Reusable fluent fragment imported by Sections templates via `@import`. |
-
-> If `mode` is omitted, Buelo auto-detects: `class ... IReport` => FullClass, source starting with `page =>`/`page.Header|Content|Footer(...)`/`@import` => Sections, otherwise Builder.
-
-#### Sections syntax
-
-```csharp
-// Page configuration (optional — falls back to ctx.PageSettings when omitted)
-page => {
-        page.Size(PageSizes.A4);
-        page.Margin(2, Unit.Centimetre);
-        page.PageColor(Colors.White);
-        page.DefaultTextStyle(x => x.FontSize(12));
-}
-
-// Header slot (optional)
-page.Header().Text((string)data.name).SemiBold().FontSize(20).FontColor(Colors.Blue.Medium);
-
-// Content slot (required)
-page.Content()
-        .PaddingVertical(1, Unit.Centimetre)
-        .Column(x => {
-                x.Spacing(10);
-                x.Item().Text(Placeholders.LoremIpsum());
-        });
-
-// Footer slot (optional)
-page.Footer().AlignCenter().Text(x => { x.Span("Page "); x.CurrentPageNumber(); });
-```
-
-Inside every section the variables `ctx`, `data`, and `helpers` are available.
-
-#### Importing shared fragments (`@import`)
-
-Save a reusable fragment as a `Partial` template and import by name or GUID:
-
-```http
-POST /api/templates
-Content-Type: application/json
-
-{
-    "name": "company-header",
-    "mode": "Partial",
-    "template": ".Text(\"Acme Corp\").Bold().FontSize(18);"
-}
-```
-
-```http
-POST /api/report/render
-Content-Type: application/json
-
-{
-    "mode": "Sections",
-    "data": { "month": "April" },
-    "template": "@import header from \"company-header\"\npage.Content().Text((string)data.month);"
-}
-```
-
-- Import by name: `@import header from "company-header"`
-- Import by GUID: `@import footer from "3fa85f64-5717-4562-b3fc-2c963f66afa6"`
-- If an import target is missing, Buelo falls back to the inline block for that slot.
-- If both import and inline section exist for the same slot, import takes precedence.
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/templates/{id}/versions` | List all version summaries `{ version, savedAt, savedBy }` |
+| `GET` | `/api/templates/{id}/versions/{n}` | Get a full version snapshot (includes template source + artefacts) |
+| `POST` | `/api/templates/{id}/versions/{n}/restore` | Restore version `n`: saves current state as new version, then overwrites with snapshot |
 
 ---
 
-### Feature 2 – Template Persistence (GUIDs)
+### Export / Import
 
-**Goal:** save templates so they can be rendered later by a stable GUID, without resending the source code.
+#### `GET /api/templates/{id}/export`
 
-This feature is **already implemented** via the `ITemplateStore` abstraction. The default store is `InMemoryTemplateStore` (data is lost on restart). See [Step-by-Step: Migrating to PostgreSQL](#step-by-step-migrating-to-postgresql) to persist data permanently.
-
-#### Typical workflow
+Downloads a ZIP archive: `{name}-{id}.zip`
 
 ```
-1. Save template   → POST /api/templates        → 201 { "id": "3fa85f64-...", … }
-2. Render it       → POST /api/report/render/3fa85f64-...  { "data": { … } }
-3. Preview it      → POST /api/report/preview/3fa85f64-...
-4. Update template → PUT  /api/templates/3fa85f64-...
-5. Delete template → DELETE /api/templates/3fa85f64-...
+template.record.json   # metadata (id, name, mode, dataSchema, mockData, â€¦)
+template.report.cs     # template source
+{artefactName}{.ext}   # one entry per artefact
 ```
+
+#### `POST /api/templates/import`
+
+Upload a ZIP file (`multipart/form-data`). A new GUID is assigned. Returns `201 Created` with the new `TemplateRecord`.
 
 ---
 
-### Feature 3 – Data Schema & Mock Data
+## Running Tests
 
-**Goal:** document the expected data shape for a template and provide a built-in mock for testing.
-
-Both are fields on `TemplateRecord`:
-
-| Field | Type | Purpose |
-|-------|------|---------|
-| `dataSchema` | `string` (JSON Schema) | Describes the data contract expected by the template. Use any JSON Schema validator or IDE plugin to validate payloads before rendering. |
-| `mockData` | `object` | A sample data object stored alongside the template. Used by `POST /api/report/preview/{id}` and as a fallback when no data is supplied to `POST /api/report/render/{id}`. |
-
-#### Example – template with schema and mock
-
-```json
-{
-  "name": "Monthly Invoice",
-  "mode": "Builder",
-  "defaultFileName": "invoice.pdf",
-  "template": "Document.Create(c => c.Page(p => p.Content().Text((string)data.customer))).GeneratePdf()",
-  "dataSchema": "{\"type\":\"object\",\"required\":[\"customer\",\"amount\"],\"properties\":{\"customer\":{\"type\":\"string\"},\"amount\":{\"type\":\"number\"}}}",
-  "mockData": { "customer": "Test Customer", "amount": 99.99 }
-}
+```bash
+dotnet test Buelo.slnx
 ```
 
-> **Future enhancement:** add a `POST /api/templates/{id}/validate` endpoint that accepts a data payload and validates it against `dataSchema` using a library such as [JsonSchema.Net](https://github.com/gregsdennis/json-everything).
+With coverage:
+
+```bash
+dotnet test Buelo.slnx --collect:"XPlat Code Coverage"
+```
+
+**Test coverage areas:**
+
+| Area | File |
+|------|------|
+| Template engine (Sections rendering, auto-detection) | `Engine/TemplateEngineTests.cs` |
+| Sections DSL parser | `Engine/SectionsTemplateParserTests.cs` |
+| Header directive parser (`@data`, `@settings`, `@helper`, â€¦) | `Engine/TemplateHeaderParserTests.cs` |
+| PageSettings factories and rendering | `Engine/PageSettingsEngineTests.cs` |
+| Version history | `Engine/TemplateVersioningTests.cs` |
+| InMemoryTemplateStore CRUD + versioning | `Engine/InMemoryTemplateStoreTests.cs` |
+| FileSystemTemplateStore CRUD + artefacts + versioning | `Engine/FileSystemTemplateStoreTests.cs` |
+| Dynamic @helper generation | `Engine/DynamicHelpersTests.cs` |
+| Mode auto-detection heuristics | `Engine/TemplateModeDetectionTests.cs` |
+| ReportController (render, preview, validation) | `Api/ReportControllerTests.cs` |
+| TemplatesController (CRUD, Partial mode) | `Api/TemplatesControllerTests.cs` |
 
 ---
 
-### Feature 4 – Custom Helper Registries
+## CI/CD
 
-**Goal:** remove the hardcoded `DefaultHelperRegistry` from the engine and make helpers a first-class, extensible system feature.
+Create `.github/workflows/ci.yml`:
 
-This feature is **already implemented**. `TemplateEngine` no longer instantiates `DefaultHelperRegistry` directly; instead it receives `IHelperRegistry` via constructor injection (DI).
+```yaml
+name: CI
 
-#### Create your own helper registry
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
 
-```csharp
-// MyHelpers.cs
-using Buelo.Contracts;
-using System.Globalization;
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-public class MyHelperRegistry : IHelperRegistry
-{
-    private static readonly CultureInfo BrCulture = new("pt-BR");
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
 
-    public string FormatCurrency(decimal value)
-        => value.ToString("C", BrCulture); // R$ 1.200,00
+      - name: Restore
+        run: dotnet restore Buelo.slnx
 
-    public string FormatDate(DateTime date)
-        => date.ToString("dd 'de' MMMM 'de' yyyy", BrCulture); // 01 de janeiro de 2026
-}
+      - name: Build
+        run: dotnet build Buelo.slnx --configuration Release --no-restore
+
+      - name: Format check
+        run: dotnet format Buelo.slnx --verify-no-changes
+
+      - name: Test
+        run: dotnet test Buelo.slnx --configuration Release --no-build --collect:"XPlat Code Coverage"
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            **/TestResults/**
+            **/coverage.cobertura.xml
 ```
 
-#### Register it before `AddBueloEngine()`
+Local parity (run before opening a PR):
 
-```csharp
-// Program.cs
-builder.Services.AddSingleton<IHelperRegistry, MyHelperRegistry>(); // ← register first
-builder.Services.AddBueloEngine();                                   // ← TryAdd is a no-op
+```bash
+dotnet restore Buelo.slnx
+dotnet build Buelo.slnx -c Release --no-restore
+dotnet format Buelo.slnx --verify-no-changes
+dotnet test Buelo.slnx -c Release --no-build --collect:"XPlat Code Coverage"
 ```
-
-`AddBueloEngine()` uses `TryAddSingleton<IHelperRegistry, DefaultHelperRegistry>()`, so your registration takes precedence.
-
-#### Extend the interface
-
-To add more helpers, extend `IHelperRegistry` (or create a new interface):
-
-```csharp
-// Buelo.Contracts/IHelperRegistry.cs
-public interface IHelperRegistry
-{
-    string FormatCurrency(decimal value);
-    string FormatDate(DateTime date);
-    string FormatPhone(string phone);   // new helper
-}
-```
-
-Then update your implementation and access it in Builder-mode templates via `helpers.FormatPhone(...)`.
 
 ---
 
 ## Technology Recommendation for Persistence
 
-The current `InMemoryTemplateStore` is suitable for development and testing. For production you need durable storage.
+The default `InMemoryTemplateStore` is suitable for development and testing. The `FileSystemTemplateStore` adds durable disk persistence. For multi-instance deployments, a database-backed store is recommended.
 
-### Recommendation: **PostgreSQL + Entity Framework Core**
+### Recommended: **PostgreSQL + Entity Framework Core**
 
 | Criteria | PostgreSQL | SQLite | SQL Server |
 |----------|-----------|--------|------------|
-| Open source | ✅ | ✅ | ❌ |
-| Production-ready | ✅ | ⚠️ (single-writer) | ✅ |
-| Cloud-managed options | ✅ (Supabase, Neon, Railway, Azure, AWS RDS) | ❌ | ✅ |
-| JSON column support | ✅ (native `jsonb`) | ⚠️ (basic) | ✅ |
-| .NET EF Core support | ✅ | ✅ | ✅ |
-| Cost | Free | Free | Paid (Express is free) |
-
-**PostgreSQL is the recommended choice** because:
-
-- `mockData` and `dataSchema` can be stored as native `jsonb` columns, enabling efficient querying.
-- It is open-source, battle-tested, and widely available on every major cloud provider.
-- The [Npgsql EF Core provider](https://www.npgsql.org/efcore/) has first-class .NET support.
+| Open source | âœ… | âœ… | âŒ |
+| Production-ready | âœ… | âš ï¸ (single-writer) | âœ… |
+| Cloud-managed | âœ… (Supabase, Neon, Railway, Azure, AWS RDS) | âŒ | âœ… |
+| Native JSON column | âœ… (`jsonb`) | âš ï¸ | âœ… |
+| .NET EF Core | âœ… | âœ… | âœ… |
 
 ---
 
@@ -410,79 +541,58 @@ public class BueloDbContext(DbContextOptions<BueloDbContext> options) : DbContex
             e.HasKey(t => t.Id);
             e.Property(t => t.Name).IsRequired().HasMaxLength(200);
             e.Property(t => t.Template).IsRequired();
-            // Store MockData as a JSONB column for efficient querying
             e.Property(t => t.MockData)
              .HasColumnType("jsonb")
              .HasConversion(
-                 v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
-                 v => System.Text.Json.JsonSerializer.Deserialize<object>(v, (System.Text.Json.JsonSerializerOptions?)null));
+                 v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                 v => JsonSerializer.Deserialize<object>(v, (JsonSerializerOptions?)null));
         });
     }
 }
 ```
 
-### 3. Implement `ITemplateStore` using EF Core
+### 3. Implement `ITemplateStore`
 
 ```csharp
 // Buelo.Engine/Data/EfTemplateStore.cs
-using Buelo.Contracts;
-using Microsoft.EntityFrameworkCore;
-
-namespace Buelo.Engine.Data;
-
 public class EfTemplateStore(BueloDbContext db) : ITemplateStore
 {
-    public Task<TemplateRecord?> GetAsync(Guid id)
-        => db.Templates.FindAsync(id).AsTask();
+    public Task<TemplateRecord?> GetAsync(Guid id)          => db.Templates.FindAsync(id).AsTask();
+    public async Task<IEnumerable<TemplateRecord>> ListAsync() => await db.Templates.ToListAsync();
 
-    public async Task<IEnumerable<TemplateRecord>> ListAsync()
-        => await db.Templates.ToListAsync();
-
-    public async Task<TemplateRecord> SaveAsync(TemplateRecord template)
+    public async Task<TemplateRecord> SaveAsync(TemplateRecord t)
     {
-        if (template.Id == Guid.Empty)
-        {
-            template.Id = Guid.NewGuid();
-            template.CreatedAt = DateTimeOffset.UtcNow;
-            db.Templates.Add(template);
-        }
-        else
-        {
-            template.UpdatedAt = DateTimeOffset.UtcNow;
-            db.Templates.Update(template);
-        }
-
+        if (t.Id == Guid.Empty) { t.Id = Guid.NewGuid(); t.CreatedAt = DateTimeOffset.UtcNow; db.Templates.Add(t); }
+        else                    { t.UpdatedAt = DateTimeOffset.UtcNow; db.Templates.Update(t); }
         await db.SaveChangesAsync();
-        return template;
+        return t;
     }
 
     public async Task<bool> DeleteAsync(Guid id)
     {
-        var template = await db.Templates.FindAsync(id);
-        if (template is null) return false;
-
-        db.Templates.Remove(template);
+        var t = await db.Templates.FindAsync(id);
+        if (t is null) return false;
+        db.Templates.Remove(t);
         await db.SaveChangesAsync();
         return true;
     }
 }
 ```
 
-### 4. Register the services
+### 4. Register services
 
 ```csharp
 // Buelo.Api/Program.cs
-builder.Services.AddDbContext<BueloDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddDbContext<BueloDbContext>(o =>
+    o.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-builder.Services.AddScoped<ITemplateStore, EfTemplateStore>(); // ← register before AddBueloEngine
+builder.Services.AddScoped<ITemplateStore, EfTemplateStore>(); // register before AddBueloEngine
 builder.Services.AddBueloEngine();
 ```
 
-### 5. Add connection string
+### 5. Connection string
 
 ```json
-// appsettings.json
 {
   "ConnectionStrings": {
     "DefaultConnection": "Host=localhost;Database=buelo;Username=postgres;Password=yourpassword"
@@ -490,189 +600,11 @@ builder.Services.AddBueloEngine();
 }
 ```
 
-### 6. Create and apply migrations
+### 6. Migrations
 
 ```bash
 dotnet ef migrations add InitialCreate --project Buelo.Engine --startup-project Buelo.Api
-dotnet ef database update --project Buelo.Engine --startup-project Buelo.Api
-```
-
----
-
-## Step-by-Step: Creating a Test Project
-
-This section shows how to create a test project and cover the main methods in the current codebase.
-
-### 1. Create the test project and add it to the solution
-
-```bash
-dotnet new xunit -n Buelo.Tests
-dotnet sln Buelo.slnx add Buelo.Tests/Buelo.Tests.csproj
-```
-
-### 2. Add project references
-
-```bash
-dotnet add Buelo.Tests reference Buelo.Engine
-dotnet add Buelo.Tests reference Buelo.Contracts
-dotnet add Buelo.Tests reference Buelo.Api
-```
-
-### 3. Add useful testing packages
-
-```bash
-dotnet add Buelo.Tests package FluentAssertions
-dotnet add Buelo.Tests package Moq
-dotnet add Buelo.Tests package Microsoft.AspNetCore.Mvc.Testing
-dotnet add Buelo.Tests package coverlet.collector
-```
-
-### 4. Suggested folder structure
-
-```text
-Buelo.Tests/
-    Engine/
-        TemplateEngineTests.cs
-        InMemoryTemplateStoreTests.cs
-    Api/
-        ReportControllerTests.cs
-        TemplatesControllerTests.cs
-    Integration/
-        RenderEndpointsTests.cs
-```
-
-### 5. Main methods to cover
-
-| Area | Class | Method | What to validate |
-|------|-------|--------|------------------|
-| Engine | `TemplateEngine` | `RenderAsync` | Returns PDF bytes for `FullClass` and `Builder` modes; invalid template raises compilation error |
-| Engine | `TemplateEngine` | `RenderTemplateAsync` | Uses `TemplateRecord.Mode` and renders with provided data |
-| Engine | `TemplateEngine` | `ConvertToDynamic` / `JsonElementToExpando` | Converts JSON payload into dynamic object preserving primitive values and object structure |
-| Store | `InMemoryTemplateStore` | `SaveAsync` | Assigns `Id` when empty and updates `UpdatedAt` on update |
-| Store | `InMemoryTemplateStore` | `GetAsync` / `ListAsync` / `DeleteAsync` | CRUD flow and delete return value when item does not exist |
-| API | `ReportController` | `Render` | Returns file response and default filename when request fileName is empty |
-| API | `ReportController` | `RenderById` | Returns `NotFound` for unknown id and uses template defaults when request is null |
-| API | `ReportController` | `Preview` | Returns `BadRequest` when `MockData` is null and file response when configured |
-| API | `TemplatesController` | `List` / `Get` / `Create` / `Update` / `Delete` | HTTP status codes and payloads for success and not-found scenarios |
-
-### 6. Example: starter test for TemplateEngine
-
-```csharp
-using Buelo.Contracts;
-using Buelo.Engine;
-using FluentAssertions;
-
-namespace Buelo.Tests.Engine;
-
-public class TemplateEngineTests
-{
-        [Fact]
-        public async Task RenderAsync_BuilderMode_ShouldGeneratePdfBytes()
-        {
-                // Arrange
-                var engine = new TemplateEngine(new DefaultHelperRegistry());
-                var template = "Document.Create(c => c.Page(p => p.Content().Text((string)data.name))).GeneratePdf()";
-
-                // Act
-                var result = await engine.RenderAsync(
-                        template,
-                        new { name = "Test" },
-                        TemplateMode.Builder);
-
-                // Assert
-                result.Should().NotBeNull();
-                result.Should().NotBeEmpty();
-        }
-}
-```
-
-### 7. Run all tests
-
-```bash
-dotnet test Buelo.slnx --collect:"XPlat Code Coverage"
-```
-
----
-
-## Step-by-Step: Creating Automated CI/CD
-
-This task creates an automated pipeline that validates every push and pull request by restoring packages, building, running tests, and checking formatting.
-
-### 1. Create the workflow file
-
-Create `.github/workflows/ci.yml` with the content below.
-
-```yaml
-name: CI
-
-on:
-        push:
-                branches: [master]
-        pull_request:
-                branches: [master]
-
-jobs:
-        validate:
-                runs-on: ubuntu-latest
-
-                steps:
-                        - name: Checkout
-                            uses: actions/checkout@v4
-
-                        - name: Setup .NET
-                            uses: actions/setup-dotnet@v4
-                            with:
-                                    dotnet-version: 10.0.x
-
-                        - name: Restore
-                            run: dotnet restore Buelo.slnx
-
-                        - name: Build (Release)
-                            run: dotnet build Buelo.slnx --configuration Release --no-restore
-
-                        - name: Validate formatting
-                            run: dotnet format Buelo.slnx --verify-no-changes --verbosity diagnostic
-
-                        - name: Run tests with coverage
-                            run: dotnet test Buelo.slnx --configuration Release --no-build --collect:"XPlat Code Coverage"
-
-                        - name: Upload test and coverage artifacts
-                            if: always()
-                            uses: actions/upload-artifact@v4
-                            with:
-                                    name: test-results
-                                    path: |
-                                            **/TestResults/**
-                                            **/coverage.cobertura.xml
-```
-
-### 2. What this pipeline validates
-
-- Project restores successfully (`dotnet restore`)
-- Solution compiles (`dotnet build`)
-- Code style/format is valid (`dotnet format --verify-no-changes`)
-- Automated tests pass (`dotnet test`)
-- Test and coverage outputs are archived as workflow artifacts
-
-### 3. Optional CD task (deploy after validation)
-
-After CI is green, add a second job (`deploy`) with `needs: validate` to publish and deploy the API.
-
-Typical steps:
-
-- `dotnet publish Buelo.Api -c Release -o ./publish`
-- Deploy to your target (Azure Web App, container registry + Kubernetes, Railway, etc.)
-- Keep deploy secrets in GitHub Secrets (never in `appsettings.json`)
-
-### 4. Local command parity (same checks as CI)
-
-Run the same validations locally before opening a PR:
-
-```bash
-dotnet restore Buelo.slnx
-dotnet build Buelo.slnx -c Release --no-restore
-dotnet format Buelo.slnx --verify-no-changes
-dotnet test Buelo.slnx -c Release --no-build --collect:"XPlat Code Coverage"
+dotnet ef database update           --project Buelo.Engine --startup-project Buelo.Api
 ```
 
 ---

@@ -8,11 +8,9 @@ public class ReportRequest
 
     /// <summary>
     /// How the template string should be interpreted.
-    /// Defaults to <see cref="TemplateMode.FullClass"/> (original behaviour).
-    /// Use <see cref="TemplateMode.Builder"/> to send only the return expression
-    /// of <c>GenerateReport</c>; the engine will wrap it automatically.
+    /// Defaults to <see cref="TemplateMode.Sections"/>.
     /// </summary>
-    public TemplateMode Mode { get; set; } = TemplateMode.FullClass;
+    public TemplateMode Mode { get; set; } = TemplateMode.Sections;
 
     /// <summary>
     /// Optional page configuration settings for PDF layout.

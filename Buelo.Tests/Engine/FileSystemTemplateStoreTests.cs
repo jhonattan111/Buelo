@@ -34,8 +34,8 @@ public class FileSystemTemplateStoreTests : IDisposable
         Assert.NotNull(retrieved);
         Assert.Equal(saved.Id, retrieved.Id);
         Assert.Equal("Test Template", retrieved.Name);
-        Assert.Equal("Document.Create(...).GeneratePdf()", retrieved.Template);
-        Assert.Equal(TemplateMode.Builder, retrieved.Mode);
+        Assert.Equal("page.Content().Text(\"hello\");", retrieved.Template);
+        Assert.Equal(TemplateMode.Sections, retrieved.Mode);
     }
 
     [Fact]
@@ -196,7 +196,7 @@ public class FileSystemTemplateStoreTests : IDisposable
     private static TemplateRecord BuildTemplate(string name = "Test Template") => new()
     {
         Name = name,
-        Template = "Document.Create(...).GeneratePdf()",
-        Mode = TemplateMode.Builder
+        Template = "page.Content().Text(\"hello\");",
+        Mode = TemplateMode.Sections
     };
 }

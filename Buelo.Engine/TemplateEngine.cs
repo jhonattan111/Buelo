@@ -11,10 +11,6 @@ using System.Text.Json;
 
 namespace Buelo.Engine;
 
-// TemplateEngine intentionally references obsolete FullClass/Builder modes to maintain
-// backward-compatible runtime support while the deprecation path is in effect.
-#pragma warning disable CS0618
-
 public class TemplateEngine
 {
     private readonly IHelperRegistry _helpers;
@@ -34,7 +30,7 @@ public class TemplateEngine
     /// <summary>
     /// Renders a template from a raw string.
     /// </summary>
-    public Task<byte[]> RenderAsync(string template, object data, TemplateMode mode = TemplateMode.FullClass, PageSettings? pageSettings = null)
+    public Task<byte[]> RenderAsync(string template, object data, TemplateMode mode = TemplateMode.Sections, PageSettings? pageSettings = null)
         => RenderCoreAsync(template, data, mode, pageSettings, helperPreamble: null);
 
     /// <summary>
@@ -118,10 +114,9 @@ public class TemplateEngine
 
         string code = effectiveMode switch
         {
-            TemplateMode.Builder => WrapBuilderTemplate(source),
             TemplateMode.Sections => await WrapSectionsTemplateAsync(source, _store),
             TemplateMode.Partial => throw new InvalidOperationException("Partial templates are reusable fragments and cannot be rendered directly."),
-            _ => source   // FullClass: use as-is
+            _ => await WrapSectionsTemplateAsync(source, _store)
         };
 
         // Prepend generated helpers class (Sections mode only).
@@ -156,33 +151,10 @@ public class TemplateEngine
 
     /// <summary>
     /// Resolves the effective <see cref="TemplateMode"/> for a given source string.
-    /// Explicit non-default modes are respected as-is; <see cref="TemplateMode.FullClass"/>
-    /// triggers auto-detection via lightweight heuristics.
+    /// Explicit <see cref="TemplateMode.Partial"/> is respected as-is; everything else resolves to <see cref="TemplateMode.Sections"/>.
     /// </summary>
     internal static TemplateMode ResolveTemplateMode(string template, TemplateMode mode)
-    {
-        // Explicit non-auto modes are used as declared.
-        if (mode == TemplateMode.Builder || mode == TemplateMode.Sections || mode == TemplateMode.Partial)
-            return mode;
-
-        // Auto-detect from source content.
-        if (IsFullClassTemplate(template)) return TemplateMode.FullClass;
-        if (SectionsTemplateParser.IsSectionsTemplate(template)) return TemplateMode.Sections;
-        return TemplateMode.Builder;
-    }
-
-    internal static bool IsFullClassTemplate(string template)
-    {
-        if (string.IsNullOrWhiteSpace(template))
-            return false;
-
-        var normalized = template.Trim();
-
-        return normalized.Contains(" class ", StringComparison.Ordinal)
-               || normalized.StartsWith("class ", StringComparison.Ordinal)
-               || normalized.Contains("IReport", StringComparison.Ordinal)
-               || normalized.Contains("GenerateReport(", StringComparison.Ordinal);
-    }
+        => mode == TemplateMode.Partial ? TemplateMode.Partial : TemplateMode.Sections;
 
     /// <summary>
     /// Compiles <paramref name="template"/> using the same wrapping pipeline as
@@ -191,7 +163,7 @@ public class TemplateEngine
     /// compiles without errors, or a list of <see cref="ValidationError"/> items otherwise.
     /// Always returns a result — never throws.
     /// </summary>
-    public async Task<ValidationResult> ValidateAsync(string template, TemplateMode mode = TemplateMode.FullClass)
+    public async Task<ValidationResult> ValidateAsync(string template, TemplateMode mode = TemplateMode.Sections)
     {
         var effectiveMode = ResolveTemplateMode(template, mode);
 
@@ -207,10 +179,9 @@ public class TemplateEngine
 
             code = effectiveMode switch
             {
-                TemplateMode.Builder => WrapBuilderTemplate(source),
                 TemplateMode.Sections => await WrapSectionsTemplateAsync(source, _store),
                 TemplateMode.Partial => source,
-                _ => source
+                _ => await WrapSectionsTemplateAsync(source, _store)
             };
         }
         catch (Exception ex)
@@ -354,21 +325,6 @@ public class TemplateEngine
         if (float.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out var plain)) return plain;
         return 2.0f;
     }
-
-    /// <summary>
-    /// Wraps a Builder-mode expression inside the boilerplate class that implements <see cref="IReport"/>.
-    /// Inside the expression the variables <c>ctx</c>, <c>data</c>, and <c>helpers</c> are available.
-    /// </summary>
-    internal static string WrapBuilderTemplate(string body) => $@"public class Report : IReport
-{{
-    public byte[] GenerateReport(ReportContext ctx)
-    {{
-        var data = ctx.Data;
-        var helpers = ctx.Helpers;
-        return {body};
-    }}
-}}";
-
 
     /// <summary>
     /// Assembles a Sections-mode source into a compilable <see cref="IReport"/> class.

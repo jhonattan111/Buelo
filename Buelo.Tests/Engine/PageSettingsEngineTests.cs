@@ -59,10 +59,10 @@ public class PageSettingsTests
     {
         var engine = new TemplateEngine(new DefaultHelperRegistry());
 
-        var template = "Document.Create(c => c.Page(p => p.Content().Text(\"Hello\"))).GeneratePdf()";
+        var template = "page.Content().Text(\"Hello\");";
         var data = CreateJsonData("test");
 
-        var pdf = await engine.RenderAsync(template, data, TemplateMode.Builder);
+        var pdf = await engine.RenderAsync(template, data, TemplateMode.Sections);
 
         Assert.NotEmpty(pdf);
     }
@@ -80,10 +80,10 @@ public class PageSettingsTests
             WatermarkText = "DRAFT"
         };
 
-        var template = "Document.Create(c => c.Page(p => p.Content().Text(\"Hello\"))).GeneratePdf()";
+        var template = "page.Content().Text(\"Hello\");";
         var data = CreateJsonData("test");
 
-        var pdf = await engine.RenderAsync(template, data, TemplateMode.Builder, customSettings);
+        var pdf = await engine.RenderAsync(template, data, TemplateMode.Sections, customSettings);
 
         Assert.NotEmpty(pdf);
     }
@@ -95,8 +95,8 @@ public class PageSettingsTests
         {
             Id = Guid.NewGuid(),
             Name = "Test",
-            Template = "Document.Create(c => c.Page(p => p.Content().Text(\"Hello\"))).GeneratePdf()",
-            Mode = TemplateMode.Builder
+            Template = "page.Content().Text(\"Hello\");",
+            Mode = TemplateMode.Sections
         };
 
         Assert.NotNull(template.PageSettings);
@@ -112,8 +112,8 @@ public class PageSettingsTests
         var template = new TemplateRecord
         {
             Name = "Test",
-            Template = "Document.Create(c => c.Page(p => p.Content().Text(\"Hello\"))).GeneratePdf()",
-            Mode = TemplateMode.Builder,
+            Template = "page.Content().Text(\"Hello\");",
+            Mode = TemplateMode.Sections,
             PageSettings = PageSettings.Default()
         };
 

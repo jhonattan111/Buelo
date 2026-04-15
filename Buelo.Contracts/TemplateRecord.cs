@@ -19,9 +19,9 @@ public class TemplateRecord
 
     /// <summary>
     /// How the template string should be interpreted.
-    /// Defaults to <see cref="TemplateMode.FullClass"/> (the original behaviour).
+    /// Defaults to <see cref="TemplateMode.Sections"/>.
     /// </summary>
-    public TemplateMode Mode { get; set; } = TemplateMode.FullClass;
+    public TemplateMode Mode { get; set; } = TemplateMode.Sections;
 
     /// <summary>
     /// Optional JSON Schema string that describes the shape of the data expected by this template.
