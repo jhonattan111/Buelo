@@ -1,4 +1,5 @@
 using Buelo.Contracts;
+using Buelo.Engine.Validators;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -26,6 +27,10 @@ public static class EngineExtensions
         services.TryAddSingleton<ITemplateStore, InMemoryTemplateStore>();
         services.TryAddSingleton<IGlobalArtefactStore, InMemoryGlobalArtefactStore>();
         services.TryAddSingleton<IBueloProjectStore, InMemoryBueloProjectStore>();
+        services.AddSingleton<IFileValidator, BueloDslValidator>();
+        services.AddSingleton<IFileValidator, JsonFileValidator>();
+        services.AddSingleton<IFileValidator, CsharpFileValidator>();
+        services.AddSingleton<FileValidatorRegistry>();
         services.AddSingleton<TemplateEngine>();
         return services;
     }

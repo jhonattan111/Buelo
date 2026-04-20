@@ -19,3 +19,30 @@ public class ReportValidateRequest
     public string Template { get; set; } = string.Empty;
     public TemplateMode Mode { get; set; } = TemplateMode.Sections;
 }
+
+// ── Per-file-type validation (Sprint 16) ─────────────────────────────────────
+
+/// <summary>A structured diagnostic produced by a per-file-type validator.</summary>
+public class ValidationDiagnostic
+{
+    public string Message { get; set; } = string.Empty;
+    public int Line { get; set; }
+    public int Column { get; set; }
+    /// <summary>"error" | "warning" | "info"</summary>
+    public string Severity { get; set; } = "error";
+}
+
+/// <summary>Result returned by <c>POST /api/validate</c>.</summary>
+public class FileValidationResult
+{
+    public bool Valid { get; set; }
+    public IList<ValidationDiagnostic> Errors { get; set; } = [];
+    public IList<ValidationDiagnostic> Warnings { get; set; } = [];
+}
+
+/// <summary>Request body for <c>POST /api/validate</c>.</summary>
+public class FileValidateRequest
+{
+    public string Extension { get; set; } = string.Empty;
+    public string Content { get; set; } = string.Empty;
+}
