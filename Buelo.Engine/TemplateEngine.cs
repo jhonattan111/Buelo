@@ -16,24 +16,40 @@ public class TemplateEngine
     private readonly IHelperRegistry _helpers;
     private readonly ITemplateStore? _store;
     private readonly IGlobalArtefactStore? _globalStore;
+    private readonly IBueloProjectStore? _projectStore;
     private readonly ConcurrentDictionary<string, IReport> _cache = new();
 
     /// <summary>
     /// Creates a <see cref="TemplateEngine"/> with an optional template store.
     /// The store is required for resolving <c>@import</c> directives in Sections-mode templates.
     /// </summary>
-    public TemplateEngine(IHelperRegistry helpers, ITemplateStore? store = null, IGlobalArtefactStore? globalStore = null)
+    public TemplateEngine(IHelperRegistry helpers, ITemplateStore? store = null, IGlobalArtefactStore? globalStore = null, IBueloProjectStore? projectStore = null)
     {
         _helpers = helpers;
         _store = store;
         _globalStore = globalStore;
+        _projectStore = projectStore;
     }
 
     /// <summary>
-    /// Renders a template from a raw string.
+    /// Merges page settings from three levels: project defaults, per-template overrides, and per-request overrides.
+    /// Priority: request > template > project.
     /// </summary>
-    public Task<byte[]> RenderAsync(string template, object data, TemplateMode mode = TemplateMode.Sections, PageSettings? pageSettings = null)
-        => RenderCoreAsync(template, data, mode, pageSettings, helperPreamble: null);
+    internal static PageSettings MergeSettings(PageSettings project, PageSettings? template, PageSettings? request)
+        => request ?? template ?? project;
+
+    /// <summary>
+    /// Renders a template from a raw string.
+    /// Applies the project-level <see cref="PageSettings"/> as the base, overridden by <paramref name="pageSettings"/> if provided.
+    /// </summary>
+    public async Task<byte[]> RenderAsync(string template, object data, TemplateMode mode = TemplateMode.Sections, PageSettings? pageSettings = null)
+    {
+        var projectSettings = _projectStore is not null
+            ? (await _projectStore.GetAsync()).PageSettings
+            : PageSettings.Default();
+        var effectiveSettings = MergeSettings(projectSettings, null, pageSettings);
+        return await RenderCoreAsync(template, data, mode, effectiveSettings, helperPreamble: null);
+    }
 
     /// <summary>
     /// Renders a persisted <see cref="TemplateRecord"/> using the supplied data.
@@ -105,7 +121,11 @@ public class TemplateEngine
                 "No data available for rendering. Provide data in the request, configure MockData, " +
                 "or declare @data from an artefact name in the template header.");
 
-        return await RenderCoreAsync(template.Template, effectiveData, template.Mode, pageSettings ?? template.PageSettings, helperPreamble);
+        var projectSettings = _projectStore is not null
+            ? (await _projectStore.GetAsync()).PageSettings
+            : PageSettings.Default();
+        var effectivePageSettings = MergeSettings(projectSettings, template.PageSettings, pageSettings);
+        return await RenderCoreAsync(template.Template, effectiveData, template.Mode, effectivePageSettings, helperPreamble);
     }
 
     // ── Core render pipeline ──────────────────────────────────────────────────
@@ -116,7 +136,21 @@ public class TemplateEngine
 
         string source = template;
         PageSettings? effectiveSettings = pageSettings;
-        if (effectiveMode == TemplateMode.Sections)
+
+        // BueloDsl: parse AST, apply DSL settings, compile to Sections source.
+        if (effectiveMode == TemplateMode.BueloDsl)
+        {
+            var ast = BueloDsl.BueloDslParser.Parse(source);
+            if (ast.Directives.Settings is { } ds && effectiveSettings is null)
+            {
+                effectiveSettings = BueloDsl.BueloDslEngine.ApplyDslSettingsStatic(
+                    PageSettings.Default(), ds);
+            }
+            source = BueloDsl.BueloDslCompiler.Compile(ast, new BueloDsl.CompileOptions());
+            effectiveMode = TemplateMode.Sections;
+            // Compiled source has no @directives — skip TemplateHeaderParser.
+        }
+        else if (effectiveMode == TemplateMode.Sections)
         {
             var (header, stripped) = TemplateHeaderParser.Parse(template);
             source = stripped;
@@ -166,7 +200,14 @@ public class TemplateEngine
     /// Explicit <see cref="TemplateMode.Partial"/> is respected as-is; everything else resolves to <see cref="TemplateMode.Sections"/>.
     /// </summary>
     internal static TemplateMode ResolveTemplateMode(string template, TemplateMode mode)
-        => mode == TemplateMode.Partial ? TemplateMode.Partial : TemplateMode.Sections;
+    {
+        if (mode == TemplateMode.Partial) return TemplateMode.Partial;
+        if (mode == TemplateMode.BueloDsl) return TemplateMode.BueloDsl;
+        // Auto-detect BueloDsl when mode defaults to Sections.
+        if (mode == TemplateMode.Sections && BueloDsl.BueloDslParser.IsBueloDslSource(template))
+            return TemplateMode.BueloDsl;
+        return TemplateMode.Sections;
+    }
 
     /// <summary>
     /// Compiles <paramref name="template"/> using the same wrapping pipeline as
@@ -183,7 +224,13 @@ public class TemplateEngine
         try
         {
             string source = template;
-            if (effectiveMode == TemplateMode.Sections)
+            if (effectiveMode == TemplateMode.BueloDsl)
+            {
+                var ast = BueloDsl.BueloDslParser.Parse(source);
+                source = BueloDsl.BueloDslCompiler.Compile(ast, new BueloDsl.CompileOptions());
+                effectiveMode = TemplateMode.Sections;
+            }
+            else if (effectiveMode == TemplateMode.Sections)
             {
                 var (_, stripped) = TemplateHeaderParser.Parse(template);
                 source = stripped;

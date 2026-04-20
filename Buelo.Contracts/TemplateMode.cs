@@ -36,5 +36,18 @@ public enum TemplateMode
     /// <see cref="Sections"/> templates at wrap time.
     /// </para>
     /// </summary>
-    Partial = 1
+    Partial = 1,
+
+    /// <summary>
+    /// The template is authored in the YAML-like <c>.buelo</c> component DSL.
+    /// The engine parses the component tree and compiles it to a <see cref="Sections"/>-mode
+    /// C# source before rendering.
+    /// </summary>
+    BueloDsl = 2,
+
+    [Obsolete("Use Sections or Partial instead.")]
+    FullClass = 10,
+
+    [Obsolete("Use Sections instead.")]
+    Builder = 11,
 }
