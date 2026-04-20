@@ -1,4 +1,5 @@
 using Buelo.Contracts;
+using Buelo.Engine.Renderers;
 using Buelo.Engine.Validators;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -32,6 +33,9 @@ public static class EngineExtensions
         services.AddSingleton<IFileValidator, CsharpFileValidator>();
         services.AddSingleton<FileValidatorRegistry>();
         services.AddSingleton<TemplateEngine>();
+        services.AddSingleton<IOutputRenderer, PdfRenderer>();
+        services.AddSingleton<IOutputRenderer, ExcelRenderer>();
+        services.AddSingleton<OutputRendererRegistry>();
         return services;
     }
 

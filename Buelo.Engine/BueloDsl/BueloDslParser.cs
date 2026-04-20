@@ -45,6 +45,7 @@ public static class BueloDslParser
         var imports = new List<BueloDslImport>();
         string? dataRef = null;
         BueloDslSettings? settings = null;
+        var formatHints = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var components = new List<BueloDslComponent>();
 
         // ── Phase 1: Directives ───────────────────────────────────────────────
@@ -75,6 +76,14 @@ public static class BueloDslParser
                 i++;
                 var block = CollectIndentedBlock(lines, i, out int consumed);
                 settings = ParseSettings(block);
+                i += consumed;
+                continue;
+            }
+            else if (string.Equals(trimmed, "@format", StringComparison.OrdinalIgnoreCase))
+            {
+                i++;
+                var block = CollectIndentedBlock(lines, i, out int consumed);
+                ParseFormatHints(block, formatHints);
                 i += consumed;
                 continue;
             }
@@ -119,7 +128,8 @@ public static class BueloDslParser
         }
 
         return new BueloDslDocument(
-            new BueloDslDirectives(imports, dataRef, settings),
+            new BueloDslDirectives(imports, dataRef, settings,
+                formatHints.Count > 0 ? formatHints : null),
             components);
     }
 
@@ -423,6 +433,38 @@ public static class BueloDslParser
             }
         }
         return new BueloDslSettings(size, orientation, margin);
+    }
+
+    private static void ParseFormatHints(string[] lines, Dictionary<string, string> hints)
+    {
+        // Parse nested structure like:
+        //   excel:
+        //     sheetName: Colaboradores
+        //     freezeHeader: true
+        // → "excel.sheetName" = "Colaboradores", "excel.freezeHeader" = "true"
+        string? currentPrefix = null;
+        foreach (var line in lines)
+        {
+            var clean = StripComment(line);
+            if (string.IsNullOrEmpty(clean.Trim())) continue;
+
+            bool indented = HasLeadingWhitespace(clean);
+            var trimmed = clean.Trim();
+            int ci = trimmed.IndexOf(':');
+            if (ci < 0) continue;
+            var k = trimmed[..ci].Trim();
+            var v = trimmed[(ci + 1)..].Trim();
+
+            if (!indented)
+            {
+                // Top-level namespace key (e.g., "excel:")
+                currentPrefix = k.ToLowerInvariant();
+            }
+            else if (currentPrefix is not null && !string.IsNullOrEmpty(v))
+            {
+                hints[$"{currentPrefix}.{k}"] = v;
+            }
+        }
     }
 
     // ── Expression validation ─────────────────────────────────────────────────

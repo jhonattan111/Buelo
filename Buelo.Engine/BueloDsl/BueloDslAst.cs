@@ -8,7 +8,8 @@ public record BueloDslDocument(
 public record BueloDslDirectives(
     IReadOnlyList<BueloDslImport> Imports,
     string? DataRef,
-    BueloDslSettings? Settings
+    BueloDslSettings? Settings,
+    IReadOnlyDictionary<string, string>? FormatHints = null
 );
 
 public record BueloDslImport(

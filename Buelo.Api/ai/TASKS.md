@@ -15,7 +15,7 @@ Source of truth for backend sprint planning. Each sprint has its own file in `ai
 | 14 | [sprint-14-backend-buelo-dsl-redesign.md](sprints/sprint-14-backend-buelo-dsl-redesign.md) | YAML-like .buelo component DSL (BueloDslParser, BueloDslCompiler, TemplateMode.BueloDsl) | `[x] done` |
 | 15 | [sprint-15-backend-project-file.md](sprints/sprint-15-backend-project-file.md) | project.bueloproject — workspace settings, global mock data, page defaults cascade | `[x] done` |
 | 16 | [sprint-16-backend-file-validation.md](sprints/sprint-16-backend-file-validation.md) | Per-file-type validation: .buelo DSL, .json, .cs/.csx via Roslyn syntax check | `[x] done` |
-| 17 | [sprint-17-backend-extensible-renderers.md](sprints/sprint-17-backend-extensible-renderers.md) | IOutputRenderer abstraction; PdfRenderer + ExcelRenderer (ClosedXML); ?format= param | `[ ] pending` |
+| 17 | [sprint-17-backend-extensible-renderers.md](sprints/sprint-17-backend-extensible-renderers.md) | IOutputRenderer abstraction; PdfRenderer + ExcelRenderer (ClosedXML); ?format= param | `[x] done` |
 
 ## Dependency Chain
 

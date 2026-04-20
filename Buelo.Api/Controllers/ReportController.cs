@@ -1,23 +1,52 @@
 using Buelo.Contracts;
 using Buelo.Engine;
+using Buelo.Engine.BueloDsl;
+using Buelo.Engine.Renderers;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Buelo.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class ReportController(TemplateEngine engine, ITemplateStore store) : ControllerBase
+public class ReportController(TemplateEngine engine, ITemplateStore store, OutputRendererRegistry renderers) : ControllerBase
 {
     /// <summary>
     /// Renders a report from a template supplied directly in the request body.
+    /// Use the optional <c>?format=pdf</c> (default) or <c>?format=excel</c> query parameter
+    /// to select the output format.
     /// </summary>
     [HttpPost("render")]
-    public async Task<IActionResult> Render([FromBody] ReportRequest request)
+    public async Task<IActionResult> Render([FromBody] ReportRequest request, [FromQuery] string format = "pdf")
     {
-        var pageSettings = request.PageSettings ?? PageSettings.Default();
-        var pdf = await engine.RenderAsync(request.Template, request.Data, request.Mode, pageSettings);
+        var renderer = renderers.TryGetRenderer(format);
+        if (renderer is null)
+            return BadRequest(new { error = $"Unsupported format '{format}'." });
 
-        return File(pdf, "application/pdf", request.FileName);
+        var effectiveMode = BueloDslParser.IsBueloDslSource(request.Template) && request.Mode == TemplateMode.Sections
+            ? TemplateMode.BueloDsl
+            : request.Mode;
+
+        if (!renderer.SupportsMode(effectiveMode))
+            return BadRequest(new { error = $"Format '{format}' does not support template mode '{effectiveMode}'." });
+
+        BueloDslDocument? ast = effectiveMode == TemplateMode.BueloDsl
+            ? BueloDslParser.Parse(request.Template) : null;
+
+        var input = new RendererInput
+        {
+            Source = request.Template,
+            Mode = effectiveMode,
+            RawData = request.Data,
+            PageSettings = request.PageSettings ?? PageSettings.Default(),
+            BueloDslDocument = ast,
+            FormatHints = ast?.Directives.FormatHints != null
+                ? new Dictionary<string, string>(ast.Directives.FormatHints)
+                : new Dictionary<string, string>()
+        };
+
+        var bytes = await renderer.RenderAsync(input);
+        var baseName = Path.GetFileNameWithoutExtension(request.FileName);
+        return File(bytes, renderer.ContentType, baseName + renderer.FileExtension);
     }
 
     /// <summary>
@@ -35,10 +64,15 @@ public class ReportController(TemplateEngine engine, ITemplateStore store) : Con
     /// Renders a previously saved template by its GUID.
     /// The request body is optional: omit it to fall back to the template's mock data and settings.
     /// Supply <c>?version=N</c> to render from a historical snapshot instead of the current template.
+    /// Supply <c>?format=pdf</c> (default) or <c>?format=excel</c> to choose the output format.
     /// </summary>
     [HttpPost("render/{id:guid}")]
-    public async Task<IActionResult> RenderById(Guid id, [FromQuery] int? version = null, [FromBody] TemplateRenderRequest? request = null)
+    public async Task<IActionResult> RenderById(Guid id, [FromQuery] int? version = null, [FromBody] TemplateRenderRequest? request = null, [FromQuery] string format = "pdf")
     {
+        var renderer = renderers.TryGetRenderer(format);
+        if (renderer is null)
+            return BadRequest(new { error = $"Unsupported format '{format}'." });
+
         TemplateRecord? template;
 
         if (version.HasValue)
@@ -47,7 +81,6 @@ public class ReportController(TemplateEngine engine, ITemplateStore store) : Con
             if (snapshot is null)
                 return NotFound(new { error = $"Version {version.Value} not found for template '{id}'." });
 
-            // Materialise snapshot into a transient TemplateRecord (inheriting metadata from current).
             var current = await store.GetAsync(id);
             if (current is null)
                 return NotFound(new { error = $"Template '{id}' not found." });
@@ -79,13 +112,12 @@ public class ReportController(TemplateEngine engine, ITemplateStore store) : Con
         var pageSettings = request?.PageSettings ?? template.PageSettings;
 
         var pdf = await engine.RenderTemplateAsync(template, data, pageSettings);
-        return File(pdf, "application/pdf", fileName);
+        return File(pdf, renderer.ContentType, Path.GetFileNameWithoutExtension(fileName) + renderer.FileExtension);
     }
 
     /// <summary>
     /// Renders a previously saved template using its built-in mock data.
     /// Useful for quickly previewing the template without supplying real data.
-    /// Uses the template's configured page settings.
     /// </summary>
     [HttpPost("preview/{id:guid}")]
     public async Task<IActionResult> Preview(Guid id)
@@ -100,5 +132,21 @@ public class ReportController(TemplateEngine engine, ITemplateStore store) : Con
         var pdf = await engine.RenderTemplateAsync(template, template.MockData, template.PageSettings);
         return File(pdf, "application/pdf", template.DefaultFileName);
     }
+
+    /// <summary>
+    /// Returns the list of supported output formats and their MIME types.
+    /// </summary>
+    [HttpGet("formats")]
+    public IActionResult GetFormats()
+    {
+        var formats = renderers.SupportedFormats
+            .Select(f =>
+            {
+                var r = renderers.TryGetRenderer(f)!;
+                return new { format = r.Format, contentType = r.ContentType, fileExtension = r.FileExtension };
+            });
+        return Ok(formats);
+    }
 }
+
 

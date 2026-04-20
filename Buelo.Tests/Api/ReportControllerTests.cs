@@ -2,6 +2,7 @@ using System.Text.Json;
 using Buelo.Api.Controllers;
 using Buelo.Contracts;
 using Buelo.Engine;
+using Buelo.Engine.Renderers;
 using Microsoft.AspNetCore.Mvc;
 using QuestPDF;
 using QuestPDF.Infrastructure;
@@ -86,7 +87,7 @@ public class ReportControllerTests
         });
 
         var engine = new TemplateEngine(new DefaultHelperRegistry());
-        var controller = new ReportController(engine, store);
+        var controller = new ReportController(engine, store, CreateRegistry(engine));
 
         var result = await controller.RenderById(template.Id, null);
 
@@ -109,7 +110,7 @@ public class ReportControllerTests
         });
 
         var engine = new TemplateEngine(new DefaultHelperRegistry());
-        var controller = new ReportController(engine, store);
+        var controller = new ReportController(engine, store, CreateRegistry(engine));
 
         var customSettings = new PageSettings
         {
@@ -135,7 +136,7 @@ public class ReportControllerTests
         });
 
         var engine = new TemplateEngine(new DefaultHelperRegistry());
-        var controller = new ReportController(engine, store);
+        var controller = new ReportController(engine, store, CreateRegistry(engine));
 
         var result = await controller.Preview(template.Id);
 
@@ -157,7 +158,7 @@ public class ReportControllerTests
         });
 
         var engine = new TemplateEngine(new DefaultHelperRegistry());
-        var controller = new ReportController(engine, store);
+        var controller = new ReportController(engine, store, CreateRegistry(engine));
 
         var result = await controller.Preview(template.Id);
 
@@ -165,11 +166,14 @@ public class ReportControllerTests
         Assert.NotEmpty(file.FileContents);
     }
 
+    private static OutputRendererRegistry CreateRegistry(TemplateEngine engine)
+        => new([new PdfRenderer(engine), new ExcelRenderer()]);
+
     private static ReportController CreateController()
     {
         var store = new InMemoryTemplateStore();
         var engine = new TemplateEngine(new DefaultHelperRegistry());
-        return new ReportController(engine, store);
+        return new ReportController(engine, store, CreateRegistry(engine));
     }
 
     // ── Validate endpoint ─────────────────────────────────────────────────────
@@ -215,5 +219,96 @@ public class ReportControllerTests
     {
         var json = JsonSerializer.Serialize(new { name });
         return JsonSerializer.Deserialize<JsonElement>(json);
+    }
+
+    // ── Sprint 17: format param + GetFormats ──────────────────────────────────
+
+    [Fact]
+    public async Task PostRender_FormatPdf_ReturnsApplicationPdf()
+    {
+        var controller = CreateController();
+        var request = new ReportRequest
+        {
+            Template = SectionsTemplate,
+            FileName = "report.pdf",
+            Data = CreateJsonData("Test")
+        };
+
+        var result = await controller.Render(request, format: "pdf");
+
+        var file = Assert.IsType<FileContentResult>(result);
+        Assert.Equal("application/pdf", file.ContentType);
+        Assert.NotEmpty(file.FileContents);
+    }
+
+    [Fact]
+    public async Task PostRender_FormatExcel_WithBueloDsl_ReturnsXlsxContentType()
+    {
+        var controller = CreateController();
+        var bueloDslSource = """
+            report title:
+              text: My Report
+            """;
+
+        var request = new ReportRequest
+        {
+            Template = bueloDslSource,
+            FileName = "report",
+            Data = CreateJsonData("Test"),
+            Mode = TemplateMode.BueloDsl
+        };
+
+        var result = await controller.Render(request, format: "excel");
+
+        var file = Assert.IsType<FileContentResult>(result);
+        Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", file.ContentType);
+        Assert.NotEmpty(file.FileContents);
+    }
+
+    [Fact]
+    public async Task PostRender_FormatExcel_WithSectionsMode_ReturnsBadRequest()
+    {
+        var controller = CreateController();
+        var request = new ReportRequest
+        {
+            Template = SectionsTemplate,
+            FileName = "report.pdf",
+            Data = CreateJsonData("Test"),
+            Mode = TemplateMode.Sections
+        };
+
+        var result = await controller.Render(request, format: "excel");
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task PostRender_UnknownFormat_ReturnsBadRequest()
+    {
+        var controller = CreateController();
+        var request = new ReportRequest
+        {
+            Template = SectionsTemplate,
+            FileName = "report.pdf",
+            Data = CreateJsonData("Test")
+        };
+
+        var result = await controller.Render(request, format: "word");
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public void GetFormats_ReturnsAllRegisteredFormats()
+    {
+        var controller = CreateController();
+
+        var result = controller.GetFormats();
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        Assert.NotNull(ok.Value);
+        var json = JsonSerializer.Serialize(ok.Value);
+        Assert.Contains("pdf", json, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("excel", json, StringComparison.OrdinalIgnoreCase);
     }
 }
