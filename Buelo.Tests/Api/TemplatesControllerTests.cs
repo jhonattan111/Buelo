@@ -117,4 +117,58 @@ public class TemplatesControllerTests
         Assert.Equal(TemplateMode.Partial, saved.Mode);
         Assert.NotEqual(Guid.Empty, saved.Id);
     }
+
+    [Fact]
+    public async Task ListFiles_ShouldReturnCoreFilesAndArtefacts()
+    {
+        var store = new InMemoryTemplateStore();
+        var saved = await store.SaveAsync(new TemplateRecord
+        {
+            Name = "Files",
+            Template = "page.Content().Text(\"hello\");",
+            Mode = TemplateMode.Sections,
+            MockData = new { name = "Alice" },
+            Artefacts =
+            [
+                new TemplateArtefact
+                {
+                    Path = "helpers/tax.helpers.cs",
+                    Name = "tax",
+                    Extension = ".helpers.cs",
+                    Content = "// helper"
+                }
+            ]
+        });
+
+        var controller = new TemplatesController(store);
+        var result = await controller.ListFiles(saved.Id);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var files = Assert.IsAssignableFrom<IEnumerable<object>>(ok.Value).ToList();
+        Assert.True(files.Count >= 3);
+    }
+
+    [Fact]
+    public async Task UpsertFile_TemplateCore_ShouldUpdateTemplateAndMode()
+    {
+        var store = new InMemoryTemplateStore();
+        var saved = await store.SaveAsync(new TemplateRecord
+        {
+            Name = "Mode",
+            Template = "old",
+            Mode = TemplateMode.Sections
+        });
+
+        var controller = new TemplatesController(store);
+        var result = await controller.UpsertFile(
+            saved.Id,
+            new UpsertTemplateFileRequest("template.report.cs", ".Text(\"partial\");", "template", "Partial"));
+
+        Assert.IsType<OkObjectResult>(result);
+
+        var reloaded = await store.GetAsync(saved.Id);
+        Assert.NotNull(reloaded);
+        Assert.Equal(".Text(\"partial\");", reloaded.Template);
+        Assert.Equal(TemplateMode.Partial, reloaded.Mode);
+    }
 }

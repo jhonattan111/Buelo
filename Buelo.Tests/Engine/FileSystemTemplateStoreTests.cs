@@ -135,6 +135,30 @@ public class FileSystemTemplateStoreTests : IDisposable
         Assert.False(File.Exists(artefactFile));
     }
 
+    [Fact]
+    public async Task SaveAsync_WithNestedArtefactPath_PersistsAndReloadsPath()
+    {
+        var template = BuildTemplate();
+        template.Artefacts.Add(new TemplateArtefact
+        {
+            Path = "helpers/tax/calc.helpers.cs",
+            Name = "calc",
+            Extension = ".helpers.cs",
+            Content = "// helper"
+        });
+
+        var saved = await _store.SaveAsync(template);
+        var retrieved = await _store.GetAsync(saved.Id);
+
+        Assert.NotNull(retrieved);
+        var artefact = Assert.Single(retrieved.Artefacts);
+        Assert.Equal("helpers/tax/calc.helpers.cs", artefact.Path);
+        Assert.Equal("// helper", artefact.Content);
+
+        var artefactFile = Path.Combine(_root, saved.Id.ToString(), "helpers", "tax", "calc.helpers.cs");
+        Assert.True(File.Exists(artefactFile));
+    }
+
     // ── ListAsync ────────────────────────────────────────────────────────────
 
     [Fact]

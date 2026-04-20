@@ -77,7 +77,9 @@ public class TemplatesController(ITemplateStore store) : ControllerBase
         if (template is null)
             return NotFound(new { error = $"Template '{id}' not found." });
 
-        var result = template.Artefacts.Select(a => new { a.Name, a.Extension }).ToList();
+        var result = template.Artefacts
+            .Select(a => new { a.Name, a.Extension, Path = ResolveArtefactPath(a) })
+            .ToList();
         return Ok(result);
     }
 
@@ -89,8 +91,7 @@ public class TemplatesController(ITemplateStore store) : ControllerBase
         if (template is null)
             return NotFound(new { error = $"Template '{id}' not found." });
 
-        var artefact = template.Artefacts.FirstOrDefault(a =>
-            string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase));
+        var artefact = template.Artefacts.FirstOrDefault(a => MatchesArtefactRef(a, name));
         if (artefact is null)
             return NotFound(new { error = $"Artefact '{name}' not found." });
 
@@ -105,26 +106,38 @@ public class TemplatesController(ITemplateStore store) : ControllerBase
         if (template is null)
             return NotFound(new { error = $"Template '{id}' not found." });
 
-        var existing = template.Artefacts.FirstOrDefault(a =>
-            string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase));
+        var existing = template.Artefacts.FirstOrDefault(a => MatchesArtefactRef(a, name));
+
+        var resolvedPath = !string.IsNullOrWhiteSpace(body.Path)
+            ? NormalizeRelativePath(body.Path)
+            : NormalizeRelativePath($"{name}{body.Extension}");
+
+        var fileName = Path.GetFileName(resolvedPath);
+        var dotIndex = fileName.IndexOf('.');
+        var parsedName = dotIndex >= 0 ? fileName[..dotIndex] : fileName;
+        var parsedExtension = dotIndex >= 0 ? fileName[dotIndex..] : body.Extension;
 
         if (existing is not null)
         {
-            existing.Extension = body.Extension;
+            existing.Path = resolvedPath;
+            existing.Name = parsedName;
+            existing.Extension = parsedExtension;
             existing.Content = body.Content;
         }
         else
         {
             template.Artefacts.Add(new TemplateArtefact
             {
-                Name = name,
-                Extension = body.Extension,
+                Path = resolvedPath,
+                Name = parsedName,
+                Extension = parsedExtension,
                 Content = body.Content
             });
         }
 
         await store.SaveAsync(template);
-        var saved = template.Artefacts.First(a => string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase));
+        var saved = template.Artefacts.First(a => MatchesArtefactRef(a, name) ||
+            string.Equals(ResolveArtefactPath(a), resolvedPath, StringComparison.OrdinalIgnoreCase));
         return Ok(saved);
     }
 
@@ -136,10 +149,128 @@ public class TemplatesController(ITemplateStore store) : ControllerBase
         if (template is null)
             return NotFound(new { error = $"Template '{id}' not found." });
 
-        var artefact = template.Artefacts.FirstOrDefault(a =>
-            string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase));
+        var artefact = template.Artefacts.FirstOrDefault(a => MatchesArtefactRef(a, name));
         if (artefact is null)
             return NotFound(new { error = $"Artefact '{name}' not found." });
+
+        template.Artefacts.Remove(artefact);
+        await store.SaveAsync(template);
+        return NoContent();
+    }
+
+    // ── File-oriented editor API ───────────────────────────────────────────
+
+    [HttpGet("{id:guid}/files")]
+    public async Task<IActionResult> ListFiles(Guid id)
+    {
+        var template = await store.GetAsync(id);
+        if (template is null)
+            return NotFound(new { error = $"Template '{id}' not found." });
+
+        var files = new List<TemplateFileDto>
+        {
+            new("template.report.cs", "template", template.Template, template.Mode.ToString()),
+            new("data/mock.data.json", "data", JsonSerializer.Serialize(template.MockData ?? new { }, new JsonSerializerOptions { WriteIndented = true }), null)
+        };
+
+        files.AddRange(template.Artefacts.Select(a =>
+        {
+            var path = ResolveArtefactPath(a);
+            return new TemplateFileDto(path, InferFileKind(path), a.Content, null);
+        }));
+
+        return Ok(files);
+    }
+
+    [HttpPut("{id:guid}/files")]
+    public async Task<IActionResult> UpsertFile(Guid id, [FromBody] UpsertTemplateFileRequest body)
+    {
+        var template = await store.GetAsync(id);
+        if (template is null)
+            return NotFound(new { error = $"Template '{id}' not found." });
+
+        var path = NormalizeRelativePath(body.Path);
+
+        if (string.Equals(path, "template.report.cs", StringComparison.OrdinalIgnoreCase))
+        {
+            template.Template = body.Content;
+            if (!string.IsNullOrWhiteSpace(body.Mode) &&
+                Enum.TryParse<TemplateMode>(body.Mode, ignoreCase: true, out var parsedMode))
+            {
+                template.Mode = parsedMode;
+            }
+
+            var savedTemplate = await store.SaveAsync(template);
+            return Ok(new TemplateFileDto(path, "template", savedTemplate.Template, savedTemplate.Mode.ToString()));
+        }
+
+        if (path.EndsWith(".data.json", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(path, "data/mock.data.json", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                template.MockData = JsonSerializer.Deserialize<JsonElement>(body.Content);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { error = $"Invalid JSON data file: {ex.Message}" });
+            }
+
+            await store.SaveAsync(template);
+            return Ok(new TemplateFileDto(path, "data", body.Content, null));
+        }
+
+        var fileName = Path.GetFileName(path);
+        var dotIndex = fileName.IndexOf('.');
+        var name = dotIndex >= 0 ? fileName[..dotIndex] : fileName;
+        var extension = dotIndex >= 0 ? fileName[dotIndex..] : string.Empty;
+
+        var artefact = template.Artefacts.FirstOrDefault(a =>
+            string.Equals(ResolveArtefactPath(a), path, StringComparison.OrdinalIgnoreCase));
+
+        if (artefact is null)
+        {
+            artefact = new TemplateArtefact
+            {
+                Path = path,
+                Name = name,
+                Extension = extension,
+                Content = body.Content
+            };
+            template.Artefacts.Add(artefact);
+        }
+        else
+        {
+            artefact.Path = path;
+            artefact.Name = name;
+            artefact.Extension = extension;
+            artefact.Content = body.Content;
+        }
+
+        await store.SaveAsync(template);
+        return Ok(new TemplateFileDto(path, InferFileKind(path), body.Content, null));
+    }
+
+    [HttpDelete("{id:guid}/files")]
+    public async Task<IActionResult> DeleteFile(Guid id, [FromQuery] string path)
+    {
+        var template = await store.GetAsync(id);
+        if (template is null)
+            return NotFound(new { error = $"Template '{id}' not found." });
+
+        var normalizedPath = NormalizeRelativePath(path);
+
+        if (string.Equals(normalizedPath, "template.report.cs", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalizedPath, "data/mock.data.json", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new { error = "Core files cannot be deleted." });
+        }
+
+        var artefact = template.Artefacts.FirstOrDefault(a =>
+            string.Equals(ResolveArtefactPath(a), normalizedPath, StringComparison.OrdinalIgnoreCase));
+
+        if (artefact is null)
+            return NotFound(new { error = $"File '{normalizedPath}' not found." });
 
         template.Artefacts.Remove(artefact);
         await store.SaveAsync(template);
@@ -229,7 +360,7 @@ public class TemplatesController(ITemplateStore store) : ControllerBase
 
             // Artefacts.
             foreach (var a in template.Artefacts)
-                await WriteZipEntryAsync(zip, $"{a.Name}{a.Extension}", a.Content);
+                await WriteZipEntryAsync(zip, ResolveArtefactPath(a), a.Content);
         }
 
         ms.Position = 0;
@@ -286,16 +417,19 @@ public class TemplatesController(ITemplateStore store) : ControllerBase
         }
 
         foreach (var entry in zip.Entries.Where(e =>
-            e.Name != "template.record.json" && e.Name != "template.report.cs"))
+            e.FullName != "template.record.json" && e.FullName != "template.report.cs"))
         {
-            var dotIndex = entry.Name.IndexOf('.');
-            var artefactName = dotIndex >= 0 ? entry.Name[..dotIndex] : entry.Name;
-            var ext = dotIndex >= 0 ? entry.Name[dotIndex..] : string.Empty;
+            var rel = NormalizeRelativePath(entry.FullName);
+            var fileName = Path.GetFileName(rel);
+            var dotIndex = fileName.IndexOf('.');
+            var artefactName = dotIndex >= 0 ? fileName[..dotIndex] : fileName;
+            var ext = dotIndex >= 0 ? fileName[dotIndex..] : string.Empty;
 
             using var reader = new StreamReader(entry.Open());
             var content = await reader.ReadToEndAsync();
             template.Artefacts.Add(new TemplateArtefact
             {
+                Path = rel,
                 Name = artefactName,
                 Extension = ext,
                 Content = content
@@ -315,6 +449,44 @@ public class TemplatesController(ITemplateStore store) : ControllerBase
         await writer.WriteAsync(content);
     }
 
+    private static string ResolveArtefactPath(TemplateArtefact artefact)
+    {
+        if (!string.IsNullOrWhiteSpace(artefact.Path))
+            return NormalizeRelativePath(artefact.Path);
+
+        return NormalizeRelativePath($"{artefact.Name}{artefact.Extension}");
+    }
+
+    private static bool MatchesArtefactRef(TemplateArtefact artefact, string reference)
+        => string.Equals(artefact.Name, reference, StringComparison.OrdinalIgnoreCase)
+           || string.Equals($"{artefact.Name}{artefact.Extension}", reference, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(ResolveArtefactPath(artefact), reference, StringComparison.OrdinalIgnoreCase);
+
+    private static string InferFileKind(string path)
+    {
+        if (path.EndsWith(".helpers.cs", StringComparison.OrdinalIgnoreCase)) return "helper";
+        if (path.EndsWith(".schema.json", StringComparison.OrdinalIgnoreCase)) return "schema";
+        if (path.EndsWith(".data.json", StringComparison.OrdinalIgnoreCase)) return "data";
+        if (path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)) return "template";
+        return "file";
+    }
+
+    private static string NormalizeRelativePath(string path)
+    {
+        var normalized = path.Replace('\\', '/').Trim();
+        while (normalized.StartsWith('/'))
+            normalized = normalized[1..];
+
+        var segments = normalized
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .ToArray();
+
+        if (segments.Any(s => s is "." or ".."))
+            throw new InvalidOperationException($"Invalid relative path '{path}'.");
+
+        return string.Join('/', segments);
+    }
+
     // ── DTOs ─────────────────────────────────────────────────────────────────
 
     private record TemplateMeta(
@@ -324,5 +496,9 @@ public class TemplatesController(ITemplateStore store) : ControllerBase
 }
 
 /// <summary>Request body for upserting a template artefact.</summary>
-public record UpsertArtefactRequest(string Extension, string Content);
+public record UpsertArtefactRequest(string Extension, string Content, string? Path = null);
+
+public record UpsertTemplateFileRequest(string Path, string Content, string? Kind = null, string? Mode = null);
+
+public record TemplateFileDto(string Path, string Kind, string Content, string? Mode);
 

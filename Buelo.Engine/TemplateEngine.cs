@@ -68,6 +68,7 @@ public class TemplateEngine
             if (header.DataRef is { } dataRef)
             {
                 var artefact = template.Artefacts.FirstOrDefault(a =>
+                    string.Equals(a.Path, dataRef, StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(a.Name, dataRef, StringComparison.OrdinalIgnoreCase) ||
                     string.Equals($"{a.Name}{a.Extension}", dataRef, StringComparison.OrdinalIgnoreCase));
 
@@ -231,6 +232,7 @@ public class TemplateEngine
         if (header.HelperArtefactRef is { } artefactRef)
         {
             var artefact = artefacts.FirstOrDefault(a =>
+                string.Equals(a.Path, artefactRef, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(a.Name, artefactRef, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals($"{a.Name}{a.Extension}", artefactRef, StringComparison.OrdinalIgnoreCase));
 

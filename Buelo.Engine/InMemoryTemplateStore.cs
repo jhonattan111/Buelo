@@ -44,6 +44,7 @@ public class InMemoryTemplateStore : ITemplateStore
                     Template = existing.Template,
                     Artefacts = existing.Artefacts.Select(a => new TemplateArtefact
                     {
+                        Path = a.Path,
                         Name = a.Name,
                         Extension = a.Extension,
                         Content = a.Content
@@ -110,6 +111,7 @@ public class InMemoryTemplateStore : ITemplateStore
         UpdatedAt = src.UpdatedAt,
         Artefacts = src.Artefacts.Select(a => new TemplateArtefact
         {
+            Path = a.Path,
             Name = a.Name,
             Extension = a.Extension,
             Content = a.Content

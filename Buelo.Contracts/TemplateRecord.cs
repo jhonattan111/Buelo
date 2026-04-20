@@ -59,6 +59,13 @@ public class TemplateRecord
 /// </summary>
 public class TemplateArtefact
 {
+    /// <summary>
+    /// Optional relative file path (including directories and extension),
+    /// e.g. <c>helpers/tax.helpers.cs</c>. When omitted, stores may derive it
+    /// from <see cref="Name"/> + <see cref="Extension"/>.
+    /// </summary>
+    public string? Path { get; set; }
+
     /// <summary>Slug-safe name (lowercase, hyphens only), e.g. "mockdata", "schema", "helper-tax".</summary>
     public string Name { get; set; } = string.Empty;
 

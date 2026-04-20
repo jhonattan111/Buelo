@@ -106,18 +106,40 @@ public class FileSystemTemplateStore : ITemplateStore
             SourceFile
         };
         foreach (var a in template.Artefacts)
-            keepFiles.Add($"{a.Name}{a.Extension}");
+            keepFiles.Add(GetArtefactRelativePath(a));
 
-        foreach (var file in Directory.EnumerateFiles(dir))
+        foreach (var file in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
         {
-            var fileName = Path.GetFileName(file);
-            if (!keepFiles.Contains(fileName))
+            var rel = NormalizeRelativePath(Path.GetRelativePath(dir, file));
+            if (rel.StartsWith($"{VersionsDir}/", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (!keepFiles.Contains(rel))
                 File.Delete(file);
+        }
+
+        foreach (var subDir in Directory
+            .EnumerateDirectories(dir, "*", SearchOption.AllDirectories)
+            .OrderByDescending(d => d.Length))
+        {
+            if (string.Equals(Path.GetFileName(subDir), VersionsDir, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (!Directory.EnumerateFileSystemEntries(subDir).Any())
+                Directory.Delete(subDir);
         }
 
         // Write each artefact.
         foreach (var a in template.Artefacts)
-            await File.WriteAllTextAsync(Path.Combine(dir, $"{a.Name}{a.Extension}"), a.Content);
+        {
+            var rel = GetArtefactRelativePath(a);
+            var fullPath = Path.Combine(dir, rel.Replace('/', Path.DirectorySeparatorChar));
+            var parent = Path.GetDirectoryName(fullPath);
+            if (!string.IsNullOrEmpty(parent))
+                Directory.CreateDirectory(parent);
+
+            await File.WriteAllTextAsync(fullPath, a.Content);
+        }
 
         return template;
     }
@@ -168,6 +190,30 @@ public class FileSystemTemplateStore : ITemplateStore
     private string VersionsDirPath(Guid id) => Path.Combine(TemplateDir(id), VersionsDir);
     private string VersionFilePath(Guid id, int version) => Path.Combine(VersionsDirPath(id), $"{version}.snapshot.json");
 
+    private static string GetArtefactRelativePath(TemplateArtefact artefact)
+    {
+        if (!string.IsNullOrWhiteSpace(artefact.Path))
+            return NormalizeRelativePath(artefact.Path);
+
+        return NormalizeRelativePath($"{artefact.Name}{artefact.Extension}");
+    }
+
+    private static string NormalizeRelativePath(string path)
+    {
+        var normalized = path.Replace('\\', '/').Trim();
+        while (normalized.StartsWith('/'))
+            normalized = normalized[1..];
+
+        var segments = normalized
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .ToArray();
+
+        if (segments.Any(s => s is "." or ".."))
+            throw new InvalidOperationException($"Invalid relative path '{path}'.");
+
+        return string.Join('/', segments);
+    }
+
     private async Task WriteVersionSnapshotAsync(Guid id, TemplateRecord existing)
     {
         var versionsDir = VersionsDirPath(id);
@@ -181,6 +227,7 @@ public class FileSystemTemplateStore : ITemplateStore
             Template = existing.Template,
             Artefacts = existing.Artefacts.Select(a => new TemplateArtefact
             {
+                Path = a.Path,
                 Name = a.Name,
                 Extension = a.Extension,
                 Content = a.Content
@@ -210,18 +257,28 @@ public class FileSystemTemplateStore : ITemplateStore
         record.Template = File.Exists(srcPath) ? await File.ReadAllTextAsync(srcPath) : string.Empty;
 
         // Read artefacts (every file except reserved ones; skip the versions sub-directory).
-        foreach (var file in Directory.EnumerateFiles(dir))
+        foreach (var file in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
         {
-            var fileName = Path.GetFileName(file);
-            if (string.Equals(fileName, MetaFile, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(fileName, SourceFile, StringComparison.OrdinalIgnoreCase))
+            var rel = NormalizeRelativePath(Path.GetRelativePath(dir, file));
+            if (rel.StartsWith($"{VersionsDir}/", StringComparison.OrdinalIgnoreCase))
                 continue;
 
+            if (string.Equals(rel, MetaFile, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(rel, SourceFile, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var fileName = Path.GetFileName(rel);
             var dotIndex = fileName.IndexOf('.');
             var name = dotIndex >= 0 ? fileName[..dotIndex] : fileName;
             var ext = dotIndex >= 0 ? fileName[dotIndex..] : string.Empty;
             var content = await File.ReadAllTextAsync(file);
-            record.Artefacts.Add(new TemplateArtefact { Name = name, Extension = ext, Content = content });
+            record.Artefacts.Add(new TemplateArtefact
+            {
+                Path = rel,
+                Name = name,
+                Extension = ext,
+                Content = content
+            });
         }
 
         return record;
