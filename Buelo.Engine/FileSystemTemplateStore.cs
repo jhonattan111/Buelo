@@ -287,6 +287,7 @@ public class FileSystemTemplateStore : ITemplateStore
     private static TemplateMeta ToMeta(TemplateRecord r) => new(
         r.Id, r.Name, r.Description, r.Mode,
         r.DataSchema, r.MockData, r.DefaultFileName,
+        r.OutputFormat,
         r.PageSettings, r.CreatedAt, r.UpdatedAt);
 
     private static TemplateRecord FromMeta(TemplateMeta m) => new()
@@ -298,6 +299,7 @@ public class FileSystemTemplateStore : ITemplateStore
         DataSchema = m.DataSchema,
         MockData = m.MockData,
         DefaultFileName = m.DefaultFileName,
+        OutputFormat = m.OutputFormat,
         PageSettings = m.PageSettings ?? PageSettings.Default(),
         CreatedAt = m.CreatedAt,
         UpdatedAt = m.UpdatedAt
@@ -308,5 +310,6 @@ public class FileSystemTemplateStore : ITemplateStore
     private record TemplateMeta(
         Guid Id, string Name, string? Description, TemplateMode Mode,
         string? DataSchema, object? MockData, string DefaultFileName,
+        OutputFormat OutputFormat,
         PageSettings? PageSettings, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt);
 }

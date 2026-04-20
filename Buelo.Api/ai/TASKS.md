@@ -16,6 +16,9 @@ Source of truth for backend sprint planning. Each sprint has its own file in `ai
 | 15 | [sprint-15-backend-project-file.md](sprints/sprint-15-backend-project-file.md) | project.bueloproject — workspace settings, global mock data, page defaults cascade | `[x] done` |
 | 16 | [sprint-16-backend-file-validation.md](sprints/sprint-16-backend-file-validation.md) | Per-file-type validation: .buelo DSL, .json, .cs/.csx via Roslyn syntax check | `[x] done` |
 | 17 | [sprint-17-backend-extensible-renderers.md](sprints/sprint-17-backend-extensible-renderers.md) | IOutputRenderer abstraction; PdfRenderer + ExcelRenderer (ClosedXML); ?format= param | `[x] done` |
+| 18 | [sprint-18-backend-inline-project-config.md](sprints/sprint-18-backend-inline-project-config.md) | Remove project.bueloproject; @project directive in .buelo; OutputFormat per TemplateRecord | `[x] done` |
+| 19 | [sprint-19-backend-project-validation.md](sprints/sprint-19-backend-project-validation.md) | POST /api/validate/project — full workspace validation | `[x] done` |
+| 20 | [sprint-20-backend-remove-obsolete.md](sprints/sprint-20-backend-remove-obsolete.md) | Remove Sections/Partial modes, Roslyn path, SectionsTemplateParser, ZIP bundle endpoints | `[x] done` |
 
 ## Dependency Chain
 
@@ -40,7 +43,13 @@ Sprint 16 (Per-file Validation)          ← unblocks frontend Sprint 16
     ↓
 Sprint 17 (Extensible Renderers)         ← Excel; unblocks frontend Sprint 17
     ↓
-[Frontend sprints 13–17 — see BueloWeb/ai/TASKS.md]
+Sprint 18 (Inline @project + OutputFormat)  ← removes project.bueloproject; format at creation
+    ↓
+Sprint 19 (Project-wide Validation)      ← replaces per-file validate trigger
+    ↓
+Sprint 20 (Remove Obsolete)              ← clean .buelo-only codebase
+    ↓
+[Frontend sprints 18–21 — see BueloWeb/ai/TASKS.md]
 ```
 
 ## Project Structure (reference)

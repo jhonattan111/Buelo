@@ -45,6 +45,7 @@ public static class BueloDslParser
         var imports = new List<BueloDslImport>();
         string? dataRef = null;
         BueloDslSettings? settings = null;
+        BueloDslProjectConfig? projectConfig = null;
         var formatHints = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var components = new List<BueloDslComponent>();
 
@@ -76,6 +77,15 @@ public static class BueloDslParser
                 i++;
                 var block = CollectIndentedBlock(lines, i, out int consumed);
                 settings = ParseSettings(block);
+                i += consumed;
+                continue;
+            }
+            else if (trimmed.StartsWith("@project", StringComparison.OrdinalIgnoreCase)
+                && (trimmed.Length == 8 || trimmed[8] == ':' || char.IsWhiteSpace(trimmed[8])))
+            {
+                i++;
+                var block = CollectIndentedBlock(lines, i, out int consumed);
+                projectConfig = ParseProjectConfig(block);
                 i += consumed;
                 continue;
             }
@@ -129,6 +139,7 @@ public static class BueloDslParser
 
         return new BueloDslDocument(
             new BueloDslDirectives(imports, dataRef, settings,
+                projectConfig,
                 formatHints.Count > 0 ? formatHints : null),
             components);
     }
@@ -433,6 +444,58 @@ public static class BueloDslParser
             }
         }
         return new BueloDslSettings(size, orientation, margin);
+    }
+
+    private static BueloDslProjectConfig ParseProjectConfig(string[] lines)
+    {
+        string? pageSize = null, orientation = null, backgroundColor = null;
+        string? defaultTextColor = null, watermarkText = null;
+        double? marginHorizontal = null, marginVertical = null;
+        int? defaultFontSize = null;
+        bool? showHeader = null, showFooter = null;
+
+        foreach (var line in lines)
+        {
+            var clean = StripComment(line).Trim();
+            if (string.IsNullOrEmpty(clean)) continue;
+            int ci = clean.IndexOf(':');
+            if (ci < 0) continue;
+            var k = clean[..ci].Trim().ToLowerInvariant();
+            var v = UnquoteIfQuoted(clean[(ci + 1)..].Trim());
+            switch (k)
+            {
+                case "pagesize": pageSize = v; break;
+                case "orientation": orientation = v; break;
+                case "marginhorizontal":
+                    if (double.TryParse(v, System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture, out double mh))
+                        marginHorizontal = mh;
+                    break;
+                case "marginvertical":
+                    if (double.TryParse(v, System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture, out double mv))
+                        marginVertical = mv;
+                    break;
+                case "backgroundcolor": backgroundColor = v; break;
+                case "defaulttextcolor": defaultTextColor = v; break;
+                case "defaultfontsize":
+                    if (int.TryParse(v, System.Globalization.NumberStyles.Integer,
+                        System.Globalization.CultureInfo.InvariantCulture, out int dfs))
+                        defaultFontSize = dfs;
+                    break;
+                case "showheader":
+                    if (bool.TryParse(v, out bool sh)) showHeader = sh;
+                    break;
+                case "showfooter":
+                    if (bool.TryParse(v, out bool sf)) showFooter = sf;
+                    break;
+                case "watermarktext": watermarkText = v; break;
+                    // Unknown keys are silently ignored.
+            }
+        }
+
+        return new BueloDslProjectConfig(pageSize, orientation, marginHorizontal, marginVertical,
+            backgroundColor, defaultTextColor, defaultFontSize, showHeader, showFooter, watermarkText);
     }
 
     private static void ParseFormatHints(string[] lines, Dictionary<string, string> hints)

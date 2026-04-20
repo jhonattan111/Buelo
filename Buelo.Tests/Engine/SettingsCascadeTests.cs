@@ -5,16 +5,15 @@ namespace Buelo.Tests.Engine;
 
 public class SettingsCascadeTests
 {
-    private static PageSettings Project() => new() { PageSize = "A4", MarginHorizontal = 2.0f };
     private static PageSettings Template() => new() { PageSize = "Letter", MarginHorizontal = 1.5f };
     private static PageSettings Request() => new() { PageSize = "A3", MarginHorizontal = 1.0f };
 
     [Fact]
-    public void MergeSettings_RequestOverridesTemplate_TemplateOverridesProject()
+    public void MergeSettings_RequestOverridesTemplate()
     {
-        var result = TemplateEngine.MergeSettings(Project(), Template(), Request());
+        var result = TemplateEngine.MergeSettings(Template(), Request());
 
-        // Request wins over everything.
+        // Request wins over template.
         Assert.Equal("A3", result.PageSize);
         Assert.Equal(1.0f, result.MarginHorizontal);
     }
@@ -22,7 +21,7 @@ public class SettingsCascadeTests
     [Fact]
     public void MergeSettings_NullRequest_UsesTemplateSettings()
     {
-        var result = TemplateEngine.MergeSettings(Project(), Template(), null);
+        var result = TemplateEngine.MergeSettings(Template(), null);
 
         // Template wins when request is null.
         Assert.Equal("Letter", result.PageSize);
@@ -30,11 +29,11 @@ public class SettingsCascadeTests
     }
 
     [Fact]
-    public void MergeSettings_AllNull_UsesProjectDefaults()
+    public void MergeSettings_AllNull_UsesDefaults()
     {
-        var result = TemplateEngine.MergeSettings(Project(), null, null);
+        var result = TemplateEngine.MergeSettings(null, null);
 
-        // Project is the fallback.
+        // Defaults are the fallback.
         Assert.Equal("A4", result.PageSize);
         Assert.Equal(2.0f, result.MarginHorizontal);
     }
@@ -42,7 +41,7 @@ public class SettingsCascadeTests
     [Fact]
     public void MergeSettings_NullTemplateWithRequest_UsesRequest()
     {
-        var result = TemplateEngine.MergeSettings(Project(), null, Request());
+        var result = TemplateEngine.MergeSettings(null, Request());
 
         Assert.Equal("A3", result.PageSize);
         Assert.Equal(1.0f, result.MarginHorizontal);

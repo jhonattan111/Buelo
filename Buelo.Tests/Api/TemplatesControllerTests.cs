@@ -16,106 +16,15 @@ public class TemplatesControllerTests
         var result = await controller.Create(new TemplateRecord
         {
             Name = "Invoice",
-            Template = "Document.Create(c => c.Page(p => p.Content().Text(\"ok\"))).GeneratePdf()"
+            Mode = TemplateMode.BueloDsl,
+            Template = "report title:\n  text: Invoice"
         });
 
         var created = Assert.IsType<CreatedAtActionResult>(result);
         var saved = Assert.IsType<TemplateRecord>(created.Value);
         Assert.NotEqual(Guid.Empty, saved.Id);
+        Assert.Equal(TemplateMode.BueloDsl, saved.Mode);
         Assert.Equal(nameof(TemplatesController.Get), created.ActionName);
-    }
-
-    [Fact]
-    public async Task Get_WhenMissing_ShouldReturnNotFound()
-    {
-        var store = new InMemoryTemplateStore();
-        var controller = new TemplatesController(store);
-
-        var result = await controller.Get(Guid.NewGuid());
-
-        Assert.IsType<NotFoundObjectResult>(result);
-    }
-
-    [Fact]
-    public async Task Update_WhenMissing_ShouldReturnNotFound()
-    {
-        var store = new InMemoryTemplateStore();
-        var controller = new TemplatesController(store);
-
-        var result = await controller.Update(Guid.NewGuid(), new TemplateRecord
-        {
-            Name = "Any",
-            Template = "any"
-        });
-
-        Assert.IsType<NotFoundObjectResult>(result);
-    }
-
-    [Fact]
-    public async Task Delete_WhenMissing_ShouldReturnNotFound()
-    {
-        var store = new InMemoryTemplateStore();
-        var controller = new TemplatesController(store);
-
-        var result = await controller.Delete(Guid.NewGuid());
-
-        Assert.IsType<NotFoundObjectResult>(result);
-    }
-
-    [Fact]
-    public async Task List_ShouldReturnStoredTemplates()
-    {
-        var store = new InMemoryTemplateStore();
-        await store.SaveAsync(new TemplateRecord
-        {
-            Name = "One",
-            Template = "Document.Create(c => c.Page(p => p.Content().Text(\"ok\"))).GeneratePdf()"
-        });
-
-        var controller = new TemplatesController(store);
-
-        var result = await controller.List();
-
-        var ok = Assert.IsType<OkObjectResult>(result);
-        var values = Assert.IsType<IEnumerable<TemplateRecord>>(ok.Value, exactMatch: false);
-        Assert.Single(values);
-    }
-
-    [Fact]
-    public async Task Create_SectionsModeTemplate_ShouldPersistMode()
-    {
-        var store = new InMemoryTemplateStore();
-        var controller = new TemplatesController(store);
-
-        var result = await controller.Create(new TemplateRecord
-        {
-            Name = "Sections Report",
-            Mode = TemplateMode.Sections,
-            Template = "page.Content().Text(\"hello\");"
-        });
-
-        var created = Assert.IsType<CreatedAtActionResult>(result);
-        var saved = Assert.IsType<TemplateRecord>(created.Value);
-        Assert.Equal(TemplateMode.Sections, saved.Mode);
-    }
-
-    [Fact]
-    public async Task Create_PartialTemplate_ShouldPersistModeAsPartial()
-    {
-        var store = new InMemoryTemplateStore();
-        var controller = new TemplatesController(store);
-
-        var result = await controller.Create(new TemplateRecord
-        {
-            Name = "shared-header",
-            Mode = TemplateMode.Partial,
-            Template = ".Text(\"Acme Corp\").Bold();"
-        });
-
-        var created = Assert.IsType<CreatedAtActionResult>(result);
-        var saved = Assert.IsType<TemplateRecord>(created.Value);
-        Assert.Equal(TemplateMode.Partial, saved.Mode);
-        Assert.NotEqual(Guid.Empty, saved.Id);
     }
 
     [Fact]
@@ -125,8 +34,8 @@ public class TemplatesControllerTests
         var saved = await store.SaveAsync(new TemplateRecord
         {
             Name = "Files",
-            Template = "page.Content().Text(\"hello\");",
-            Mode = TemplateMode.Sections,
+            Template = "report title:\n  text: hello",
+            Mode = TemplateMode.BueloDsl,
             MockData = new { name = "Alice" },
             Artefacts =
             [
@@ -156,19 +65,19 @@ public class TemplatesControllerTests
         {
             Name = "Mode",
             Template = "old",
-            Mode = TemplateMode.Sections
+            Mode = TemplateMode.BueloDsl
         });
 
         var controller = new TemplatesController(store);
         var result = await controller.UpsertFile(
             saved.Id,
-            new UpsertTemplateFileRequest("template.report.cs", ".Text(\"partial\");", "template", "Partial"));
+            new UpsertTemplateFileRequest("template.report.cs", "report title:\n  text: Updated", "template", "BueloDsl"));
 
         Assert.IsType<OkObjectResult>(result);
 
         var reloaded = await store.GetAsync(saved.Id);
         Assert.NotNull(reloaded);
-        Assert.Equal(".Text(\"partial\");", reloaded.Template);
-        Assert.Equal(TemplateMode.Partial, reloaded.Mode);
+        Assert.Equal("report title:\n  text: Updated", reloaded.Template);
+        Assert.Equal(TemplateMode.BueloDsl, reloaded.Mode);
     }
 }

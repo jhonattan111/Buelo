@@ -1,6 +1,15 @@
 namespace Buelo.Contracts;
 
 /// <summary>
+/// The output format a template produces.
+/// </summary>
+public enum OutputFormat
+{
+    Pdf,
+    Excel
+}
+
+/// <summary>
 /// Represents a named, persisted report template that can be rendered on-demand by its <see cref="Id"/>.
 /// </summary>
 public class TemplateRecord
@@ -19,9 +28,9 @@ public class TemplateRecord
 
     /// <summary>
     /// How the template string should be interpreted.
-    /// Defaults to <see cref="TemplateMode.Sections"/>.
+    /// Defaults to <see cref="TemplateMode.BueloDsl"/>.
     /// </summary>
-    public TemplateMode Mode { get; set; } = TemplateMode.Sections;
+    public TemplateMode Mode { get; set; } = TemplateMode.BueloDsl;
 
     /// <summary>
     /// Optional JSON Schema string that describes the shape of the data expected by this template.
@@ -37,6 +46,13 @@ public class TemplateRecord
 
     /// <summary>Default file name to use when no explicit name is provided at render time.</summary>
     public string DefaultFileName { get; set; } = "report.pdf";
+
+    /// <summary>
+    /// The output format this template produces.
+    /// Defaults to <see cref="OutputFormat.Pdf"/>.
+    /// Set once at template creation time; not overridable per-request.
+    /// </summary>
+    public OutputFormat OutputFormat { get; set; } = OutputFormat.Pdf;
 
     /// <summary>
     /// Page configuration settings for PDF layout (size, margins, colors, watermark, etc).

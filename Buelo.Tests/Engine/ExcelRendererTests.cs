@@ -107,13 +107,13 @@ public class ExcelRendererTests
     }
 
     [Fact]
-    public async Task RenderAsync_SectionsMode_ThrowsNotSupported()
+    public async Task RenderAsync_UnsupportedMode_ThrowsNotSupported()
     {
         var renderer = CreateRenderer();
         var input = new RendererInput
         {
             Source = "page.Content().Text(\"hello\");",
-            Mode = TemplateMode.Sections,
+            Mode = (TemplateMode)999,
             RawData = null,
             PageSettings = PageSettings.Default()
         };

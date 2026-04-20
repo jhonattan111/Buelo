@@ -8,9 +8,9 @@ public class ReportRequest
 
     /// <summary>
     /// How the template string should be interpreted.
-    /// Defaults to <see cref="TemplateMode.Sections"/>.
+    /// Defaults to <see cref="TemplateMode.BueloDsl"/>.
     /// </summary>
-    public TemplateMode Mode { get; set; } = TemplateMode.Sections;
+    public TemplateMode Mode { get; set; } = TemplateMode.BueloDsl;
 
     /// <summary>
     /// Optional page configuration settings for PDF layout.

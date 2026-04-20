@@ -1,6 +1,5 @@
 using Buelo.Contracts;
 using Microsoft.AspNetCore.Mvc;
-using System.IO.Compression;
 using System.Text.Json;
 
 namespace Buelo.Api.Controllers;
@@ -328,126 +327,7 @@ public class TemplatesController(ITemplateStore store) : ControllerBase
         return Ok(saved);
     }
 
-    // ── Export / Import ───────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Exports the template and all its artefacts as a ZIP bundle.
-    /// The ZIP layout mirrors the <c>FileSystemTemplateStore</c> folder structure.
-    /// </summary>
-    [HttpGet("{id:guid}/export")]
-    public async Task<IActionResult> Export(Guid id)
-    {
-        var template = await store.GetAsync(id);
-        if (template is null)
-            return NotFound(new { error = $"Template '{id}' not found." });
-
-        var ms = new MemoryStream();
-        using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
-        {
-            // Metadata: everything except Template source and Artefacts list.
-            var meta = new TemplateMeta(
-                template.Id, template.Name, template.Description, template.Mode,
-                template.DataSchema, template.MockData, template.DefaultFileName,
-                template.PageSettings, template.CreatedAt, template.UpdatedAt);
-
-            var opts = new JsonSerializerOptions { WriteIndented = true };
-            var metaJson = JsonSerializer.Serialize(meta, opts);
-            await WriteZipEntryAsync(zip, "template.record.json", metaJson);
-
-            // Template source.
-            if (!string.IsNullOrEmpty(template.Template))
-                await WriteZipEntryAsync(zip, "template.report.cs", template.Template);
-
-            // Artefacts.
-            foreach (var a in template.Artefacts)
-                await WriteZipEntryAsync(zip, ResolveArtefactPath(a), a.Content);
-        }
-
-        ms.Position = 0;
-        var safeName = string.Concat(template.Name.Split(Path.GetInvalidFileNameChars()));
-        return File(ms.ToArray(), "application/zip", $"{safeName}-{id}.zip");
-    }
-
-    /// <summary>
-    /// Imports a template from a ZIP bundle (as produced by <c>GET /export</c>).
-    /// A new GUID is always assigned; the original ID is discarded.
-    /// </summary>
-    [HttpPost("import")]
-    public async Task<IActionResult> Import(IFormFile file)
-    {
-        if (file is null || file.Length == 0)
-            return BadRequest(new { error = "No file provided." });
-
-        using var ms = new MemoryStream();
-        await file.CopyToAsync(ms);
-        ms.Position = 0;
-
-        using var zip = new ZipArchive(ms, ZipArchiveMode.Read);
-
-        var metaEntry = zip.GetEntry("template.record.json");
-        if (metaEntry is null)
-            return BadRequest(new { error = "Invalid bundle: missing template.record.json." });
-
-        TemplateMeta meta;
-        using (var reader = new StreamReader(metaEntry.Open()))
-        {
-            var json = await reader.ReadToEndAsync();
-            var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            meta = JsonSerializer.Deserialize<TemplateMeta>(json, opts)
-                   ?? throw new InvalidOperationException("Failed to deserialize template metadata.");
-        }
-
-        var template = new TemplateRecord
-        {
-            Id = Guid.Empty,
-            Name = meta.Name,
-            Description = meta.Description,
-            Mode = meta.Mode,
-            DataSchema = meta.DataSchema,
-            MockData = meta.MockData,
-            DefaultFileName = meta.DefaultFileName,
-            PageSettings = meta.PageSettings ?? PageSettings.Default()
-        };
-
-        var srcEntry = zip.GetEntry("template.report.cs");
-        if (srcEntry is not null)
-        {
-            using var reader = new StreamReader(srcEntry.Open());
-            template.Template = await reader.ReadToEndAsync();
-        }
-
-        foreach (var entry in zip.Entries.Where(e =>
-            e.FullName != "template.record.json" && e.FullName != "template.report.cs"))
-        {
-            var rel = NormalizeRelativePath(entry.FullName);
-            var fileName = Path.GetFileName(rel);
-            var dotIndex = fileName.IndexOf('.');
-            var artefactName = dotIndex >= 0 ? fileName[..dotIndex] : fileName;
-            var ext = dotIndex >= 0 ? fileName[dotIndex..] : string.Empty;
-
-            using var reader = new StreamReader(entry.Open());
-            var content = await reader.ReadToEndAsync();
-            template.Artefacts.Add(new TemplateArtefact
-            {
-                Path = rel,
-                Name = artefactName,
-                Extension = ext,
-                Content = content
-            });
-        }
-
-        var saved = await store.SaveAsync(template);
-        return CreatedAtAction(nameof(Get), new { id = saved.Id }, saved);
-    }
-
     // ── Helpers ──────────────────────────────────────────────────────────────
-
-    private static async Task WriteZipEntryAsync(ZipArchive zip, string entryName, string content)
-    {
-        var entry = zip.CreateEntry(entryName);
-        await using var writer = new StreamWriter(entry.Open());
-        await writer.WriteAsync(content);
-    }
 
     private static string ResolveArtefactPath(TemplateArtefact artefact)
     {
@@ -487,12 +367,6 @@ public class TemplatesController(ITemplateStore store) : ControllerBase
         return string.Join('/', segments);
     }
 
-    // ── DTOs ─────────────────────────────────────────────────────────────────
-
-    private record TemplateMeta(
-        Guid Id, string Name, string? Description, TemplateMode Mode,
-        string? DataSchema, object? MockData, string DefaultFileName,
-        PageSettings? PageSettings, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt);
 }
 
 /// <summary>Request body for upserting a template artefact.</summary>

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Buelo.Contracts;
 using Buelo.Engine;
+using Buelo.Engine.BueloDsl;
 using QuestPDF;
 using QuestPDF.Infrastructure;
 
@@ -59,10 +60,10 @@ public class PageSettingsTests
     {
         var engine = new TemplateEngine(new DefaultHelperRegistry());
 
-        var template = "page.Content().Text(\"Hello\");";
+        var template = "report title:\n  text: Hello";
         var data = CreateJsonData("test");
 
-        var pdf = await engine.RenderAsync(template, data, TemplateMode.Sections);
+        var pdf = await engine.RenderAsync(template, data, TemplateMode.BueloDsl);
 
         Assert.NotEmpty(pdf);
     }
@@ -80,10 +81,10 @@ public class PageSettingsTests
             WatermarkText = "DRAFT"
         };
 
-        var template = "page.Content().Text(\"Hello\");";
+        var template = "report title:\n  text: Hello";
         var data = CreateJsonData("test");
 
-        var pdf = await engine.RenderAsync(template, data, TemplateMode.Sections, customSettings);
+        var pdf = await engine.RenderAsync(template, data, TemplateMode.BueloDsl, customSettings);
 
         Assert.NotEmpty(pdf);
     }
@@ -95,8 +96,8 @@ public class PageSettingsTests
         {
             Id = Guid.NewGuid(),
             Name = "Test",
-            Template = "page.Content().Text(\"Hello\");",
-            Mode = TemplateMode.Sections
+            Template = "report title:\n  text: Hello",
+            Mode = TemplateMode.BueloDsl
         };
 
         Assert.NotNull(template.PageSettings);
@@ -112,8 +113,8 @@ public class PageSettingsTests
         var template = new TemplateRecord
         {
             Name = "Test",
-            Template = "page.Content().Text(\"Hello\");",
-            Mode = TemplateMode.Sections,
+            Template = "report title:\n  text: Hello",
+            Mode = TemplateMode.BueloDsl,
             PageSettings = PageSettings.Default()
         };
 
@@ -123,6 +124,58 @@ public class PageSettingsTests
         var pdf = await engine.RenderTemplateAsync(template, data, customSettings);
 
         Assert.NotEmpty(pdf);
+    }
+
+    [Fact]
+    public void PageSettings_Cascade_TemplateThenProjectInlineThenRequest()
+    {
+        var templateSettings = new PageSettings
+        {
+            PageSize = "Letter",
+            MarginHorizontal = 1.5f,
+            MarginVertical = 1.5f,
+            BackgroundColor = "#EEEEEE",
+            ShowHeader = true,
+            ShowFooter = true
+        };
+
+        var inlineProject = new BueloDslProjectConfig(
+            PageSize: "A4",
+            Orientation: null,
+            MarginHorizontal: 2.0,
+            MarginVertical: 2.5,
+            BackgroundColor: "#FFFFFF",
+            DefaultTextColor: null,
+            DefaultFontSize: null,
+            ShowHeader: false,
+            ShowFooter: null,
+            WatermarkText: "CONFIDENTIAL"
+        );
+
+        var requestSettings = new PageSettings
+        {
+            PageSize = "A3",
+            MarginHorizontal = 3.0f,
+            MarginVertical = 3.0f,
+            BackgroundColor = "#000000",
+            ShowHeader = true,
+            ShowFooter = false
+        };
+
+        var withInline = TemplateEngine.ApplyProjectConfigSettings(templateSettings, inlineProject);
+        var effective = TemplateEngine.MergeSettings(withInline, requestSettings);
+
+        // Request-level overrides still have the highest precedence.
+        Assert.Equal("A3", effective.PageSize);
+        Assert.Equal(3.0f, effective.MarginHorizontal);
+        Assert.Equal(3.0f, effective.MarginVertical);
+        Assert.Equal("#000000", effective.BackgroundColor);
+        Assert.True(effective.ShowHeader);
+        Assert.False(effective.ShowFooter);
+
+        // Inline @project values are visible before request override.
+        Assert.Equal("CONFIDENTIAL", withInline.WatermarkText);
+        Assert.False(withInline.ShowHeader);
     }
 
     [Fact]

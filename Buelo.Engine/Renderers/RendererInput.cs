@@ -13,7 +13,7 @@ public class RendererInput
     /// <summary>Raw data object as received from the caller (typically a JsonElement).</summary>
     public object? RawData { get; set; }
 
-    /// <summary>Resolved page settings after cascade (project → template → request).</summary>
+    /// <summary>Resolved page settings after cascade (template → request).</summary>
     public PageSettings PageSettings { get; set; } = new();
 
     /// <summary>Parsed .buelo AST — available only when Mode == BueloDsl. Null otherwise.</summary>

@@ -35,7 +35,7 @@ public class FileSystemTemplateStoreTests : IDisposable
         Assert.Equal(saved.Id, retrieved.Id);
         Assert.Equal("Test Template", retrieved.Name);
         Assert.Equal("page.Content().Text(\"hello\");", retrieved.Template);
-        Assert.Equal(TemplateMode.Sections, retrieved.Mode);
+        Assert.Equal(TemplateMode.BueloDsl, retrieved.Mode);
     }
 
     [Fact]
@@ -221,6 +221,6 @@ public class FileSystemTemplateStoreTests : IDisposable
     {
         Name = name,
         Template = "page.Content().Text(\"hello\");",
-        Mode = TemplateMode.Sections
+        Mode = TemplateMode.BueloDsl
     };
 }

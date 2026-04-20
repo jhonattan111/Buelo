@@ -218,6 +218,6 @@ public class TemplateVersioningTests : IDisposable
     {
         Name = "Versioning Test",
         Template = templateSource,
-        Mode = TemplateMode.Sections
+        Mode = TemplateMode.BueloDsl
     };
 }

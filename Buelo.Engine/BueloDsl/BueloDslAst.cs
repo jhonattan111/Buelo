@@ -9,7 +9,25 @@ public record BueloDslDirectives(
     IReadOnlyList<BueloDslImport> Imports,
     string? DataRef,
     BueloDslSettings? Settings,
+    BueloDslProjectConfig? ProjectConfig = null,
     IReadOnlyDictionary<string, string>? FormatHints = null
+);
+
+/// <summary>
+/// Parsed content of the <c>@project</c> directive block in a .buelo file.
+/// Overrides the template-record page settings for this specific report.
+/// </summary>
+public record BueloDslProjectConfig(
+    string? PageSize,
+    string? Orientation,
+    double? MarginHorizontal,
+    double? MarginVertical,
+    string? BackgroundColor,
+    string? DefaultTextColor,
+    int? DefaultFontSize,
+    bool? ShowHeader,
+    bool? ShowFooter,
+    string? WatermarkText
 );
 
 public record BueloDslImport(

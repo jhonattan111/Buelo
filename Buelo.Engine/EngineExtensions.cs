@@ -27,7 +27,8 @@ public static class EngineExtensions
         // TryAdd so that AddBueloFileSystemStore() (or any custom store) registered first takes precedence.
         services.TryAddSingleton<ITemplateStore, InMemoryTemplateStore>();
         services.TryAddSingleton<IGlobalArtefactStore, InMemoryGlobalArtefactStore>();
-        services.TryAddSingleton<IBueloProjectStore, InMemoryBueloProjectStore>();
+        services.TryAddSingleton<IWorkspaceFileEnumerator>(sp =>
+            new FileSystemWorkspaceFileEnumerator(ResolveStorePath(sp, rootPath: null)));
         services.AddSingleton<IFileValidator, BueloDslValidator>();
         services.AddSingleton<IFileValidator, JsonFileValidator>();
         services.AddSingleton<IFileValidator, CsharpFileValidator>();
@@ -52,29 +53,25 @@ public static class EngineExtensions
     {
         services.TryAddSingleton<ITemplateStore>(sp =>
         {
-            string path = rootPath
-                ?? sp.GetService<Microsoft.Extensions.Configuration.IConfiguration>()?["Buelo:TemplateStorePath"]
-                ?? "templates";
+            string path = ResolveStorePath(sp, rootPath);
             return new FileSystemTemplateStore(path);
         });
 
         services.TryAddSingleton<IGlobalArtefactStore>(sp =>
         {
-            string path = rootPath
-                ?? sp.GetService<Microsoft.Extensions.Configuration.IConfiguration>()?["Buelo:TemplateStorePath"]
-                ?? "templates";
+            string path = ResolveStorePath(sp, rootPath);
             return new FileSystemGlobalArtefactStore(path);
         });
 
-        services.TryAddSingleton<IBueloProjectStore>(sp =>
-        {
-            string path = rootPath
-                ?? sp.GetService<Microsoft.Extensions.Configuration.IConfiguration>()?["Buelo:TemplateStorePath"]
-                ?? "templates";
-            return new FileSystemBueloProjectStore(path);
-        });
+        services.TryAddSingleton<IWorkspaceFileEnumerator>(sp =>
+            new FileSystemWorkspaceFileEnumerator(ResolveStorePath(sp, rootPath)));
 
         return services.AddBueloEngine();
     }
+
+    private static string ResolveStorePath(IServiceProvider sp, string? rootPath)
+        => rootPath
+            ?? sp.GetService<Microsoft.Extensions.Configuration.IConfiguration>()?["Buelo:TemplateStorePath"]
+            ?? "templates";
 }
 

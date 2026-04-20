@@ -9,7 +9,6 @@ namespace Buelo.Tests.Engine;
 
 public class PdfRendererTests
 {
-    private const string SectionsTemplate = "page.Content().Text((string)data.name);";
     private const string BueloDslSource = """
         report title:
           text: Hello World
@@ -30,23 +29,6 @@ public class PdfRendererTests
     }
 
     [Fact]
-    public async Task RenderAsync_SectionsMode_ReturnsPdfBytes()
-    {
-        var renderer = CreateRenderer();
-        var input = new RendererInput
-        {
-            Source = SectionsTemplate,
-            Mode = TemplateMode.Sections,
-            RawData = JsonData("World"),
-            PageSettings = PageSettings.Default()
-        };
-
-        var bytes = await renderer.RenderAsync(input);
-
-        Assert.NotEmpty(bytes);
-    }
-
-    [Fact]
     public async Task RenderAsync_BueloDslMode_ReturnsPdfBytes()
     {
         var renderer = CreateRenderer();
@@ -64,11 +46,25 @@ public class PdfRendererTests
     }
 
     [Fact]
-    public void SupportsMode_AllModes_ReturnsTrue()
+    public async Task RenderAsync_InvalidMode_Throws()
     {
         var renderer = CreateRenderer();
-        Assert.True(renderer.SupportsMode(TemplateMode.Sections));
+        var input = new RendererInput
+        {
+            Source = BueloDslSource,
+            Mode = (TemplateMode)999,
+            RawData = JsonData("World"),
+            PageSettings = PageSettings.Default()
+        };
+
+        await Assert.ThrowsAsync<NotSupportedException>(() => renderer.RenderAsync(input));
+    }
+
+    [Fact]
+    public void SupportsMode_OnlyBueloDsl_ReturnsExpectedValues()
+    {
+        var renderer = CreateRenderer();
         Assert.True(renderer.SupportsMode(TemplateMode.BueloDsl));
-        Assert.True(renderer.SupportsMode(TemplateMode.Partial));
+        Assert.False(renderer.SupportsMode((TemplateMode)999));
     }
 }

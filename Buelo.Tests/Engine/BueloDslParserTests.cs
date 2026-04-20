@@ -222,4 +222,98 @@ public class BueloDslParserTests
         Assert.True(layout.Style.Bold);
         Assert.Equal("#333333", layout.Style.Color);
     }
+
+    [Fact]
+    public void Parse_ProjectBlock_WithAllFields_ParsesProjectConfig()
+    {
+        var source = """
+            @project
+              pageSize: A4
+              orientation: Portrait
+              marginHorizontal: 2.0
+              marginVertical: 2.5
+              backgroundColor: "#FFFFFF"
+              defaultTextColor: "#000000"
+              defaultFontSize: 12
+              showHeader: true
+              showFooter: false
+              watermarkText: "CONFIDENTIAL"
+            report title:
+              text: "Hello"
+            """;
+
+        var doc = BueloDslParser.Parse(source);
+
+        var pc = Assert.IsType<BueloDslProjectConfig>(doc.Directives.ProjectConfig);
+        Assert.Equal("A4", pc.PageSize);
+        Assert.Equal("Portrait", pc.Orientation);
+        Assert.Equal(2.0, pc.MarginHorizontal);
+        Assert.Equal(2.5, pc.MarginVertical);
+        Assert.Equal("#FFFFFF", pc.BackgroundColor);
+        Assert.Equal("#000000", pc.DefaultTextColor);
+        Assert.Equal(12, pc.DefaultFontSize);
+        Assert.True(pc.ShowHeader);
+        Assert.False(pc.ShowFooter);
+        Assert.Equal("CONFIDENTIAL", pc.WatermarkText);
+    }
+
+    [Fact]
+    public void Parse_ProjectBlock_WithPartialFields_LeavesMissingAsNull()
+    {
+        var source = """
+            @project
+              pageSize: Letter
+              showHeader: true
+            report title:
+              text: "Hello"
+            """;
+
+        var doc = BueloDslParser.Parse(source);
+
+        var pc = Assert.IsType<BueloDslProjectConfig>(doc.Directives.ProjectConfig);
+        Assert.Equal("Letter", pc.PageSize);
+        Assert.True(pc.ShowHeader);
+        Assert.Null(pc.MarginHorizontal);
+        Assert.Null(pc.MarginVertical);
+        Assert.Null(pc.DefaultTextColor);
+        Assert.Null(pc.DefaultFontSize);
+        Assert.Null(pc.WatermarkText);
+    }
+
+    [Fact]
+    public void Parse_ProjectBlock_UnknownKeys_AreIgnored()
+    {
+        var source = """
+            @project
+              unknownKey: value
+              pageSize: A3
+            report title:
+              text: "Hello"
+            """;
+
+        var doc = BueloDslParser.Parse(source);
+
+        var pc = Assert.IsType<BueloDslProjectConfig>(doc.Directives.ProjectConfig);
+        Assert.Equal("A3", pc.PageSize);
+        Assert.Null(pc.MarginHorizontal);
+        Assert.Null(pc.ShowFooter);
+    }
+
+    [Fact]
+    public void Parse_ProjectBlock_WithoutKeys_ParsesEmptyProjectConfig()
+    {
+        var source = """
+            @project
+            report title:
+              text: "Hello"
+            """;
+
+        var doc = BueloDslParser.Parse(source);
+
+        var pc = Assert.IsType<BueloDslProjectConfig>(doc.Directives.ProjectConfig);
+        Assert.Null(pc.PageSize);
+        Assert.Null(pc.MarginHorizontal);
+        Assert.Null(pc.MarginVertical);
+        Assert.Null(pc.ShowHeader);
+    }
 }

@@ -106,6 +106,7 @@ public class InMemoryTemplateStore : ITemplateStore
         DataSchema = src.DataSchema,
         MockData = src.MockData,
         DefaultFileName = src.DefaultFileName,
+        OutputFormat = src.OutputFormat,
         PageSettings = src.PageSettings,
         CreatedAt = src.CreatedAt,
         UpdatedAt = src.UpdatedAt,

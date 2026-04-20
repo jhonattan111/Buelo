@@ -106,7 +106,7 @@ public class BueloDslEngineTests
     }
 
     [Fact]
-    public async Task TemplateEngine_AutoDetects_BueloDslMode()
+    public async Task TemplateEngine_BueloDslMode_RendersSuccessfully()
     {
         var engine = new TemplateEngine(new DefaultHelperRegistry());
         const string source = """
@@ -114,8 +114,7 @@ public class BueloDslEngineTests
               text: "Auto-detected"
             """;
 
-        // Pass as Sections (default) — should auto-detect BueloDsl
-        var pdf = await engine.RenderAsync(source, CreateJsonData("test"), TemplateMode.Sections);
+        var pdf = await engine.RenderAsync(source, CreateJsonData("test"), TemplateMode.BueloDsl);
 
         Assert.NotEmpty(pdf);
     }

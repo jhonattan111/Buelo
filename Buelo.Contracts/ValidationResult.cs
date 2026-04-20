@@ -17,7 +17,7 @@ public record ValidationResult
 public class ReportValidateRequest
 {
     public string Template { get; set; } = string.Empty;
-    public TemplateMode Mode { get; set; } = TemplateMode.Sections;
+    public TemplateMode Mode { get; set; } = TemplateMode.BueloDsl;
 }
 
 // ── Per-file-type validation (Sprint 16) ─────────────────────────────────────
@@ -45,4 +45,34 @@ public class FileValidateRequest
 {
     public string Extension { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Aggregated validation result for all files in the workspace.
+/// </summary>
+public class ProjectValidationResult
+{
+    /// <summary>True only when every file in the project is valid.</summary>
+    public bool Valid => Files.All(f => f.Result.Valid);
+
+    /// <summary>Per-file validation results, ordered by file path.</summary>
+    public IList<FileValidationEntry> Files { get; set; } = [];
+
+    /// <summary>Total number of errors across all files.</summary>
+    public int TotalErrors => Files.Sum(f => f.Result.Errors.Count);
+
+    /// <summary>Total number of warnings across all files.</summary>
+    public int TotalWarnings => Files.Sum(f => f.Result.Warnings.Count);
+}
+
+/// <summary>Validation result for a single workspace file.</summary>
+public class FileValidationEntry
+{
+    /// <summary>Workspace-relative file path, e.g. "relatorio_1/relatorio_1.buelo".</summary>
+    public string Path { get; set; } = string.Empty;
+
+    /// <summary>File extension (e.g. ".buelo", ".json", ".csx").</summary>
+    public string Extension { get; set; } = string.Empty;
+
+    public FileValidationResult Result { get; set; } = new();
 }

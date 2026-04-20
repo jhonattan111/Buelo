@@ -7,6 +7,18 @@ namespace Buelo.Tests.Api;
 
 public class ValidateControllerTests
 {
+    private sealed class FakeWorkspaceFileEnumerator(params WorkspaceFile[] files) : IWorkspaceFileEnumerator
+    {
+        public async IAsyncEnumerable<WorkspaceFile> EnumerateAsync()
+        {
+            foreach (var file in files)
+            {
+                yield return file;
+                await Task.Yield();
+            }
+        }
+    }
+
     private static ValidateController CreateController()
     {
         var registry = new FileValidatorRegistry(
@@ -15,7 +27,18 @@ public class ValidateControllerTests
             new JsonFileValidator(),
             new CsharpFileValidator()
         ]);
-        return new ValidateController(registry);
+        return new ValidateController(registry, new FakeWorkspaceFileEnumerator());
+    }
+
+    private static ValidateController CreateController(params WorkspaceFile[] files)
+    {
+        var registry = new FileValidatorRegistry(
+        [
+            new BueloDslValidator(),
+            new JsonFileValidator(),
+            new CsharpFileValidator()
+        ]);
+        return new ValidateController(registry, new FakeWorkspaceFileEnumerator(files));
     }
 
     [Fact]
@@ -68,5 +91,24 @@ public class ValidateControllerTests
         var validation = Assert.IsType<FileValidationResult>(ok.Value);
         Assert.False(validation.Valid);
         Assert.NotEmpty(validation.Errors);
+    }
+
+    [Fact]
+    public async Task PostValidateProject_AggregatesAndOrdersFiles()
+    {
+        var controller = CreateController(
+            new WorkspaceFile("z/report.buelo", ".buelo", "report title:\n  text: Hello"),
+            new WorkspaceFile("a/data.json", ".json", "{ invalid }")
+        );
+
+        var result = await controller.ValidateProject();
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var validation = Assert.IsType<ProjectValidationResult>(ok.Value);
+        Assert.Equal(2, validation.Files.Count);
+        Assert.False(validation.Valid);
+        Assert.Equal("a/data.json", validation.Files[0].Path);
+        Assert.Equal("z/report.buelo", validation.Files[1].Path);
+        Assert.True(validation.TotalErrors > 0);
     }
 }
