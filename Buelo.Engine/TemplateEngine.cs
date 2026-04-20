@@ -15,16 +15,18 @@ public class TemplateEngine
 {
     private readonly IHelperRegistry _helpers;
     private readonly ITemplateStore? _store;
+    private readonly IGlobalArtefactStore? _globalStore;
     private readonly ConcurrentDictionary<string, IReport> _cache = new();
 
     /// <summary>
     /// Creates a <see cref="TemplateEngine"/> with an optional template store.
     /// The store is required for resolving <c>@import</c> directives in Sections-mode templates.
     /// </summary>
-    public TemplateEngine(IHelperRegistry helpers, ITemplateStore? store = null)
+    public TemplateEngine(IHelperRegistry helpers, ITemplateStore? store = null, IGlobalArtefactStore? globalStore = null)
     {
         _helpers = helpers;
         _store = store;
+        _globalStore = globalStore;
     }
 
     /// <summary>
@@ -76,7 +78,16 @@ public class TemplateEngine
                 {
                     effectiveData = JsonSerializer.Deserialize<JsonElement>(artefact.Content);
                 }
-                else if (_store is not null && Guid.TryParse(dataRef, out var refId))
+                else if (_globalStore is not null)
+                {
+                    // Global store: try by name (assuming .json extension), then by GUID.
+                    var globalArtefact = await _globalStore.GetByNameAsync(dataRef, ".json")
+                        ?? (Guid.TryParse(dataRef, out var gaId) ? await _globalStore.GetAsync(gaId) : null);
+                    if (globalArtefact is not null)
+                        effectiveData = JsonSerializer.Deserialize<JsonElement>(globalArtefact.Content);
+                }
+
+                if (effectiveData is null && _store is not null && Guid.TryParse(dataRef, out var refId))
                 {
                     var refTemplate = await _store.GetAsync(refId);
                     effectiveData = refTemplate?.MockData;
@@ -84,7 +95,7 @@ public class TemplateEngine
             }
 
             // Resolve helpers.
-            helperPreamble = await BuildHelperPreambleAsync(header, template.Artefacts);
+            helperPreamble = await BuildHelperPreambleAsync(header, template.Artefacts, _store, _globalStore);
         }
 
         effectiveData ??= template.MockData;
@@ -115,9 +126,9 @@ public class TemplateEngine
 
         string code = effectiveMode switch
         {
-            TemplateMode.Sections => await WrapSectionsTemplateAsync(source, _store),
+            TemplateMode.Sections => await WrapSectionsTemplateAsync(source, _store, _globalStore),
             TemplateMode.Partial => throw new InvalidOperationException("Partial templates are reusable fragments and cannot be rendered directly."),
-            _ => await WrapSectionsTemplateAsync(source, _store)
+            _ => await WrapSectionsTemplateAsync(source, _store, _globalStore)
         };
 
         // Prepend generated helpers class (Sections mode only).
@@ -180,9 +191,9 @@ public class TemplateEngine
 
             code = effectiveMode switch
             {
-                TemplateMode.Sections => await WrapSectionsTemplateAsync(source, _store),
+                TemplateMode.Sections => await WrapSectionsTemplateAsync(source, _store, _globalStore),
                 TemplateMode.Partial => source,
-                _ => await WrapSectionsTemplateAsync(source, _store)
+                _ => await WrapSectionsTemplateAsync(source, _store, _globalStore)
             };
         }
         catch (Exception ex)
@@ -226,7 +237,8 @@ public class TemplateEngine
     internal static async Task<string?> BuildHelperPreambleAsync(
         TemplateHeader header,
         IList<TemplateArtefact> artefacts,
-        ITemplateStore? store = null)
+        ITemplateStore? store = null,
+        IGlobalArtefactStore? globalStore = null)
     {
         // 1. Artefact-based helpers take precedence over inline ones.
         if (header.HelperArtefactRef is { } artefactRef)
@@ -238,6 +250,16 @@ public class TemplateEngine
 
             if (artefact is not null)
                 return WrapHelperClass(artefact.Content);
+
+            // Global store fallback: try by name (.csx), then by GUID.
+            if (globalStore is not null)
+            {
+                var globalArtefact = await globalStore.GetByNameAsync(artefactRef, ".csx")
+                    ?? await globalStore.GetByNameAsync(artefactRef, ".cs")
+                    ?? (Guid.TryParse(artefactRef, out var gaId) ? await globalStore.GetAsync(gaId) : null);
+                if (globalArtefact is not null)
+                    return WrapHelperClass(globalArtefact.Content);
+            }
 
             // Cross-template lookup when ref is a GUID.
             if (store is not null && Guid.TryParse(artefactRef, out var refId))
@@ -336,19 +358,32 @@ public class TemplateEngine
     /// When no inline page-configuration block is present, a fallback using
     /// <c>ctx.PageSettings</c> is emitted automatically.
     /// </summary>
-    internal static async Task<string> WrapSectionsTemplateAsync(string source, ITemplateStore? store)
+    internal static async Task<string> WrapSectionsTemplateAsync(string source, ITemplateStore? store, IGlobalArtefactStore? globalStore = null)
     {
         var imports = SectionsTemplateParser.ParseImports(source);
 
         // Resolve imported partial bodies keyed by slot.
         var importedBodies = new Dictionary<SectionSlot, string>();
-        if (store != null)
+        foreach (var import in imports)
         {
-            foreach (var import in imports)
+            // 1. Local template store.
+            if (store != null)
             {
                 var partial = await ResolvePartialAsync(import.Target, store);
                 if (partial != null)
+                {
                     importedBodies[import.Slot] = partial.Template;
+                    continue;
+                }
+            }
+
+            // 2. Global artefact store: by name (.buelo) or by GUID.
+            if (globalStore != null)
+            {
+                var globalArtefact = await globalStore.GetByNameAsync(import.Target, ".buelo")
+                    ?? (Guid.TryParse(import.Target, out var gaId) ? await globalStore.GetAsync(gaId) : null);
+                if (globalArtefact != null)
+                    importedBodies[import.Slot] = globalArtefact.Content;
             }
         }
 

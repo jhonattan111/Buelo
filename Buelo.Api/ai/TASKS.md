@@ -11,7 +11,7 @@ Source of truth for backend sprint planning. Each sprint has its own file in `ai
 | 7 | [sprint-7-backend-dsl-foundation.md](sprints/sprint-7-backend-dsl-foundation.md) | Deprecate FullClass/Builder, header directives (@data/@settings/@schema), /validate endpoint | `[x] done` |
 | 8 | [sprint-8-backend-template-bundle.md](sprints/sprint-8-backend-template-bundle.md) | TemplateBundle artefacts, FileSystemTemplateStore, export/import ZIP | `[x] done` |
 | 9 | [sprint-9-backend-helpers-versioning.md](sprints/sprint-9-backend-helpers-versioning.md) | Dynamic @helper scripts, template versioning + restore | `[x] done` |
-| 13 | [sprint-13-backend-global-artefact-store.md](sprints/sprint-13-backend-global-artefact-store.md) | Global shared files (colaborador.json, formatters.csx) not tied to any template; file extension conventions | `[ ] pending` |
+| 13 | [sprint-13-backend-global-artefact-store.md](sprints/sprint-13-backend-global-artefact-store.md) | Global shared files (colaborador.json, formatters.csx) not tied to any template; file extension conventions | `[x] done` |
 | 14 | [sprint-14-backend-buelo-dsl-redesign.md](sprints/sprint-14-backend-buelo-dsl-redesign.md) | YAML-like .buelo component DSL (BueloDslParser, BueloDslCompiler, TemplateMode.BueloDsl) | `[ ] pending` |
 | 15 | [sprint-15-backend-project-file.md](sprints/sprint-15-backend-project-file.md) | project.bueloproject — workspace settings, global mock data, page defaults cascade | `[ ] pending` |
 | 16 | [sprint-16-backend-file-validation.md](sprints/sprint-16-backend-file-validation.md) | Per-file-type validation: .buelo DSL, .json, .cs/.csx via Roslyn syntax check | `[ ] pending` |

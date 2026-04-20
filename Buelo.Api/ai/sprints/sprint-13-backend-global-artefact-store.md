@@ -4,7 +4,7 @@
 Allow files to exist **independently from any specific template**. A `colaborador.json` data file, a `shared-header.buelo` partial, or a `formatters.csx` helper can be created once and referenced by any report, eliminating duplication across templates.
 
 ## Status
-`[ ] pending`
+`[x] done`
 
 ## Dependencies
 - Sprint 9 complete ✅

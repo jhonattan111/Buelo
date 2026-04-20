@@ -236,4 +236,83 @@ public class TemplateEngineTests
         var json = JsonSerializer.Serialize(new { name });
         return JsonSerializer.Deserialize<JsonElement>(json);
     }
+
+    // ── Global Artefact Store resolution (Sprint 13) ──────────────────────────
+
+    [Fact]
+    public async Task DataResolution_LocalArtefactTakesPrecedenceOverGlobal()
+    {
+        var globalStore = new InMemoryGlobalArtefactStore();
+        await globalStore.SaveAsync(new GlobalArtefact
+        {
+            Name = "mockdata",
+            Extension = ".json",
+            Content = "{\"name\":\"FromGlobal\"}"
+        });
+
+        var localArtefact = new TemplateArtefact
+        {
+            Name = "mockdata",
+            Extension = ".json",
+            Content = "{\"name\":\"FromLocal\"}"
+        };
+
+        var template = new TemplateRecord
+        {
+            Name = "Test",
+            Template = "@data from \"mockdata\"\n" + SectionsTemplate,
+            Mode = TemplateMode.Sections,
+            Artefacts = [localArtefact]
+        };
+
+        var engine = new TemplateEngine(new DefaultHelperRegistry(), globalStore: globalStore);
+        var pdf = await engine.RenderTemplateAsync(template, data: null);
+
+        Assert.NotEmpty(pdf);
+    }
+
+    [Fact]
+    public async Task DataResolution_FallsBackToGlobalWhenLocalMissing()
+    {
+        var globalStore = new InMemoryGlobalArtefactStore();
+        await globalStore.SaveAsync(new GlobalArtefact
+        {
+            Name = "mockdata",
+            Extension = ".json",
+            Content = "{\"name\":\"FromGlobal\"}"
+        });
+
+        var template = new TemplateRecord
+        {
+            Name = "Test",
+            Template = "@data from \"mockdata\"\n" + SectionsTemplate,
+            Mode = TemplateMode.Sections,
+            Artefacts = []
+        };
+
+        var engine = new TemplateEngine(new DefaultHelperRegistry(), globalStore: globalStore);
+        var pdf = await engine.RenderTemplateAsync(template, data: null);
+
+        Assert.NotEmpty(pdf);
+    }
+
+    [Fact]
+    public async Task ImportResolution_ResolvesByGuidFromGlobalStore()
+    {
+        var globalStore = new InMemoryGlobalArtefactStore();
+        var partial = await globalStore.SaveAsync(new GlobalArtefact
+        {
+            Name = "shared-header",
+            Extension = ".buelo",
+            Content = ".Text(\"Global Header\");"
+        });
+
+        var template = "@import Header from \"" + partial.Id + "\"\n" +
+                       "page.Content().Text((string)data.name);";
+
+        var engine = new TemplateEngine(new DefaultHelperRegistry(), globalStore: globalStore);
+        var pdf = await engine.RenderAsync(template, CreateJsonData("World"));
+
+        Assert.NotEmpty(pdf);
+    }
 }
