@@ -18,6 +18,11 @@ public class ReportController(TemplateEngine engine, ITemplateStore store, Outpu
     [HttpPost("render")]
     public async Task<IActionResult> Render([FromBody] ReportRequest request, [FromQuery] string format = "pdf")
     {
+        if (!string.IsNullOrWhiteSpace(request.TemplatePath))
+        {
+            return await RenderWorkspaceFile(request, format);
+        }
+
         var renderer = renderers.TryGetRenderer(format);
         if (renderer is null)
             return BadRequest(new { error = $"Unsupported format '{format}'." });
@@ -45,6 +50,16 @@ public class ReportController(TemplateEngine engine, ITemplateStore store, Outpu
         var bytes = await renderer.RenderAsync(input);
         var baseName = Path.GetFileNameWithoutExtension(request.FileName);
         return File(bytes, renderer.ContentType, baseName + renderer.FileExtension);
+    }
+
+    /// <summary>
+    /// Renders a report from a workspace-relative <c>.buelo</c> path.
+    /// Uses optional <c>dataSourcePath</c> override, then <c>@project dataSourcePath</c>, then <c>@data from</c>.
+    /// </summary>
+    [HttpPost("render/file")]
+    public Task<IActionResult> RenderFile([FromBody] ReportRequest request, [FromQuery] string format = "pdf")
+    {
+        return RenderWorkspaceFile(request, format);
     }
 
     /// <summary>
@@ -177,6 +192,43 @@ public class ReportController(TemplateEngine engine, ITemplateStore store, Outpu
                 return new { format = r.Format, contentType = r.ContentType, fileExtension = r.FileExtension };
             });
         return Ok(formats);
+    }
+
+    private async Task<IActionResult> RenderWorkspaceFile(ReportRequest request, string format)
+    {
+        if (string.IsNullOrWhiteSpace(request.TemplatePath))
+            return BadRequest(new { error = "templatePath is required for workspace file rendering." });
+
+        var renderer = renderers.TryGetRenderer(format);
+        if (renderer is null)
+            return BadRequest(new { error = $"Unsupported format '{format}'." });
+
+        if (!renderer.SupportsMode(TemplateMode.BueloDsl))
+            return BadRequest(new { error = $"Format '{format}' does not support template mode 'BueloDsl'." });
+
+        try
+        {
+            var pageSettings = request.PageSettings ?? PageSettings.Default();
+            var bytes = await engine.RenderWorkspaceFileAsync(
+                request.TemplatePath,
+                request.Data,
+                request.DataSourcePath,
+                pageSettings);
+
+            var baseName = Path.GetFileNameWithoutExtension(request.FileName);
+            var outputName = string.IsNullOrWhiteSpace(baseName)
+                ? "report"
+                : baseName;
+            return File(bytes, renderer.ContentType, outputName + renderer.FileExtension);
+        }
+        catch (FileNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 }
 

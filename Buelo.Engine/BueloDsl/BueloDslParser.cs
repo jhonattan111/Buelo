@@ -448,7 +448,7 @@ public static class BueloDslParser
 
     private static BueloDslProjectConfig ParseProjectConfig(string[] lines)
     {
-        string? pageSize = null, orientation = null, backgroundColor = null;
+        string? dataSourcePath = null, pageSize = null, orientation = null, backgroundColor = null;
         string? defaultTextColor = null, watermarkText = null;
         double? marginHorizontal = null, marginVertical = null;
         int? defaultFontSize = null;
@@ -464,6 +464,7 @@ public static class BueloDslParser
             var v = UnquoteIfQuoted(clean[(ci + 1)..].Trim());
             switch (k)
             {
+                case "datasourcepath": dataSourcePath = v; break;
                 case "pagesize": pageSize = v; break;
                 case "orientation": orientation = v; break;
                 case "marginhorizontal":
@@ -495,7 +496,7 @@ public static class BueloDslParser
         }
 
         return new BueloDslProjectConfig(pageSize, orientation, marginHorizontal, marginVertical,
-            backgroundColor, defaultTextColor, defaultFontSize, showHeader, showFooter, watermarkText);
+            backgroundColor, defaultTextColor, defaultFontSize, showHeader, showFooter, watermarkText, dataSourcePath);
     }
 
     private static void ParseFormatHints(string[] lines, Dictionary<string, string> hints)

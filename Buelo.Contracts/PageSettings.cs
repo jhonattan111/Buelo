@@ -7,6 +7,12 @@ namespace Buelo.Contracts;
 public class PageSettings
 {
     /// <summary>
+    /// Optional workspace-relative JSON file used as data source for .buelo render.
+    /// Example: <c>data/mock.json</c>.
+    /// </summary>
+    public string? DataSourcePath { get; set; }
+
+    /// <summary>
     /// Page size (e.g., "A4", "Letter", "Legal").
     /// Defaults to "A4".
     /// </summary>

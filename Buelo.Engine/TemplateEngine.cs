@@ -9,13 +9,17 @@ public class TemplateEngine
 {
     private readonly IHelperRegistry _helpers;
     private readonly ITemplateStore? _store;
-    private readonly IGlobalArtefactStore? _globalStore;
+    private readonly IWorkspaceStore? _workspaceStore;
 
-    public TemplateEngine(IHelperRegistry helpers, ITemplateStore? store = null, IGlobalArtefactStore? globalStore = null)
+    public TemplateEngine(
+        IHelperRegistry helpers,
+        ITemplateStore? store = null,
+        IWorkspaceStore? workspaceStore = null,
+        IGlobalArtefactStore? _ = null)
     {
         _helpers = helpers;
         _store = store;
-        _globalStore = globalStore;
+        _workspaceStore = workspaceStore;
     }
 
     internal static PageSettings MergeSettings(PageSettings? template, PageSettings? request)
@@ -55,14 +59,6 @@ public class TemplateEngine
             {
                 effectiveData = JsonSerializer.Deserialize<JsonElement>(artefact.Content);
             }
-            else if (_globalStore is not null)
-            {
-                var globalArtefact = await _globalStore.GetByNameAsync(dataRef, ".json")
-                    ?? (Guid.TryParse(dataRef, out var gaId) ? await _globalStore.GetAsync(gaId) : null);
-                if (globalArtefact is not null)
-                    effectiveData = JsonSerializer.Deserialize<JsonElement>(globalArtefact.Content);
-            }
-
             if (effectiveData is null && _store is not null && Guid.TryParse(dataRef, out var refId))
             {
                 var refTemplate = await _store.GetAsync(refId);
@@ -82,6 +78,70 @@ public class TemplateEngine
             effectivePageSettings = ApplyProjectConfigSettings(effectivePageSettings, inlineProject);
 
         effectivePageSettings = MergeSettings(effectivePageSettings, pageSettings);
+
+        var context = new ReportContext
+        {
+            Data = ConvertToDynamic(effectiveData),
+            Helpers = _helpers,
+            PageSettings = effectivePageSettings,
+            Globals = new Dictionary<string, object>
+            {
+                ["__pageSettings"] = effectivePageSettings
+            }
+        };
+
+        var engine = new BueloDslEngine(_helpers);
+        return engine.RenderParsed(ast, context);
+    }
+
+    public async Task<byte[]> RenderWorkspaceFileAsync(
+        string templatePath,
+        object? data,
+        string? dataSourcePath = null,
+        PageSettings? pageSettings = null)
+    {
+        if (_workspaceStore is null)
+            throw new InvalidOperationException("Workspace rendering is not available because IWorkspaceStore is not configured.");
+
+        var resolved = await BueloImportResolver.ResolveAsync(_workspaceStore, templatePath);
+        var ast = BueloDslParser.Parse(resolved.Source);
+
+        var effectivePageSettings = pageSettings ?? PageSettings.Default();
+        if (ast.Directives.Settings is { } ds)
+            effectivePageSettings = BueloDslEngine.ApplyDslSettingsStatic(effectivePageSettings, ds);
+        if (ast.Directives.ProjectConfig is { } inlineProject)
+            effectivePageSettings = ApplyProjectConfigSettings(effectivePageSettings, inlineProject);
+
+        var effectiveData = data;
+        if (effectiveData is null)
+        {
+            var boundDataPath =
+                dataSourcePath
+                ?? effectivePageSettings.DataSourcePath
+                ?? ast.Directives.DataRef;
+
+            if (!string.IsNullOrWhiteSpace(boundDataPath))
+            {
+                var resolvedDataPath = ResolveWorkspacePath(resolved.EntryPath, boundDataPath);
+                var dataFile = await _workspaceStore.GetFileAsync(resolvedDataPath);
+                if (dataFile is null)
+                    throw new InvalidOperationException($"Bound data source '{resolvedDataPath}' was not found.");
+
+                if (!string.Equals(dataFile.Extension, ".json", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException($"Bound data source '{resolvedDataPath}' must be a .json file.");
+
+                try
+                {
+                    effectiveData = JsonSerializer.Deserialize<JsonElement>(dataFile.Content);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException($"Data source '{resolvedDataPath}' contains invalid JSON: {ex.Message}");
+                }
+            }
+        }
+
+        effectiveData ??= new { };
 
         var context = new ReportContext
         {
@@ -118,6 +178,7 @@ public class TemplateEngine
     {
         return new PageSettings
         {
+            DataSourcePath = projectConfig.DataSourcePath ?? @base.DataSourcePath,
             PageSize = projectConfig.PageSize ?? @base.PageSize,
             MarginHorizontal = projectConfig.MarginHorizontal.HasValue ? (float)projectConfig.MarginHorizontal.Value : @base.MarginHorizontal,
             MarginVertical = projectConfig.MarginVertical.HasValue ? (float)projectConfig.MarginVertical.Value : @base.MarginVertical,
@@ -131,6 +192,26 @@ public class TemplateEngine
             ShowHeader = projectConfig.ShowHeader ?? @base.ShowHeader,
             ShowFooter = projectConfig.ShowFooter ?? @base.ShowFooter
         };
+    }
+
+    private static string ResolveWorkspacePath(string ownerPath, string rawPath)
+    {
+        var path = rawPath.Trim().Replace('\\', '/');
+        if (path.StartsWith('/'))
+            return FileSystemWorkspaceStore.NormalizePath(path);
+
+        // Data source binding uses workspace-relative paths by default.
+        // Only explicit "./" is treated as relative to the owning .buelo file.
+        if (!path.StartsWith("./", StringComparison.Ordinal))
+            return FileSystemWorkspaceStore.NormalizePath(path);
+
+        path = path[2..];
+
+        var ownerDir = ownerPath.Contains('/')
+            ? ownerPath[..ownerPath.LastIndexOf('/')]
+            : string.Empty;
+        var combined = string.IsNullOrWhiteSpace(ownerDir) ? path : $"{ownerDir}/{path}";
+        return FileSystemWorkspaceStore.NormalizePath(combined);
     }
 
     public static object ConvertToDynamic(object data)

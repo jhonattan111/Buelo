@@ -1,0 +1,40 @@
+@project
+  pageSize: A4
+  orientation: Portrait
+  marginHorizontal: 2
+  marginVertical: 2
+  backgroundColor: "#FFFFFF"
+  defaultTextColor: "#000000"
+  defaultFontSize: 12
+  showHeader: true
+  showFooter: true
+  dataSourcePath: "relacao_colaboradores/data.json"
+  outputFormat: pdf
+
+@settings
+  size: A4
+  orientation: Portrait
+  margin: 2cm
+
+report title:
+  text: "My Report {{(string)name}}"
+  style:
+    fontSize: 18
+    bold: true
+    align: center
+
+page footer:
+  text: "Page {{ page }} of {{ pageCount }}"
+  style:
+    align: center
+    fontSize: 9
+
+data:
+  table:
+    columns:
+      - field: id
+        label: ID
+        width: 10%
+      - field: name
+        label: Name
+        width: 90%

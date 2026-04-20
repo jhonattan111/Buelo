@@ -7,16 +7,51 @@ namespace Buelo.Tests.Api;
 
 public class ValidateControllerTests
 {
-    private sealed class FakeWorkspaceFileEnumerator(params WorkspaceFile[] files) : IWorkspaceFileEnumerator
+    private sealed class FakeWorkspaceStore(params WorkspaceFile[] files) : IWorkspaceStore
     {
-        public async IAsyncEnumerable<WorkspaceFile> EnumerateAsync()
+        public Task<IReadOnlyList<WorkspaceNode>> GetTreeAsync()
+            => Task.FromResult<IReadOnlyList<WorkspaceNode>>([]);
+
+        public Task<IReadOnlyList<WorkspaceFileRecord>> ListFilesAsync(string? extension = null)
         {
-            foreach (var file in files)
-            {
-                yield return file;
-                await Task.Yield();
-            }
+            var items = files
+                .Where(f => extension is null || string.Equals(f.Extension, extension, StringComparison.OrdinalIgnoreCase))
+                .Select(f => new WorkspaceFileRecord
+                {
+                    Path = f.RelativePath,
+                    Name = Path.GetFileName(f.RelativePath),
+                    Extension = f.Extension,
+                    Content = f.Content,
+                    LastModifiedUtc = DateTimeOffset.UtcNow
+                })
+                .ToList();
+
+            return Task.FromResult<IReadOnlyList<WorkspaceFileRecord>>(items);
         }
+
+        public Task<WorkspaceFileRecord?> GetFileAsync(string path)
+            => Task.FromResult<WorkspaceFileRecord?>(null);
+
+        public Task<WorkspaceFileRecord> CreateFileAsync(string path, string content = "", bool overwrite = false)
+            => throw new NotSupportedException();
+
+        public Task<WorkspaceFileRecord> UpdateFileAsync(string path, string content, bool createIfMissing = false)
+            => throw new NotSupportedException();
+
+        public Task CreateFolderAsync(string path)
+            => throw new NotSupportedException();
+
+        public Task MoveAsync(string path, string destinationPath, bool overwrite = false)
+            => throw new NotSupportedException();
+
+        public Task RenameAsync(string path, string newName, bool overwrite = false)
+            => throw new NotSupportedException();
+
+        public Task DeleteAsync(string path, bool recursive = true)
+            => throw new NotSupportedException();
+
+        public Task<bool> ExistsAsync(string path)
+            => Task.FromResult(false);
     }
 
     private static ValidateController CreateController()
@@ -27,7 +62,7 @@ public class ValidateControllerTests
             new JsonFileValidator(),
             new CsharpFileValidator()
         ]);
-        return new ValidateController(registry, new FakeWorkspaceFileEnumerator());
+        return new ValidateController(registry, new FakeWorkspaceStore());
     }
 
     private static ValidateController CreateController(params WorkspaceFile[] files)
@@ -38,7 +73,7 @@ public class ValidateControllerTests
             new JsonFileValidator(),
             new CsharpFileValidator()
         ]);
-        return new ValidateController(registry, new FakeWorkspaceFileEnumerator(files));
+        return new ValidateController(registry, new FakeWorkspaceStore(files));
     }
 
     [Fact]

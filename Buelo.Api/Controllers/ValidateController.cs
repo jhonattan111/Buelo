@@ -6,7 +6,7 @@ namespace Buelo.Api.Controllers;
 
 [ApiController]
 [Route("api/validate")]
-public class ValidateController(FileValidatorRegistry registry, IWorkspaceFileEnumerator enumerator) : ControllerBase
+public class ValidateController(FileValidatorRegistry registry, IWorkspaceStore workspaceStore) : ControllerBase
 {
     [HttpPost]
     public async Task<IActionResult> Validate([FromBody] FileValidateRequest request)
@@ -20,12 +20,13 @@ public class ValidateController(FileValidatorRegistry registry, IWorkspaceFileEn
     {
         var result = new ProjectValidationResult();
 
-        await foreach (var file in enumerator.EnumerateAsync())
+        var files = await workspaceStore.ListFilesAsync();
+        foreach (var file in files)
         {
             var fileResult = await registry.ValidateAsync(file.Extension, file.Content);
             result.Files.Add(new FileValidationEntry
             {
-                Path = file.RelativePath,
+                Path = file.Path,
                 Extension = file.Extension,
                 Result = fileResult
             });

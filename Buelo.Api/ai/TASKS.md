@@ -19,6 +19,7 @@ Source of truth for backend sprint planning. Each sprint has its own file in `ai
 | 18 | [sprint-18-backend-inline-project-config.md](sprints/sprint-18-backend-inline-project-config.md) | Remove project.bueloproject; @project directive in .buelo; OutputFormat per TemplateRecord | `[x] done` |
 | 19 | [sprint-19-backend-project-validation.md](sprints/sprint-19-backend-project-validation.md) | POST /api/validate/project — full workspace validation | `[x] done` |
 | 20 | [sprint-20-backend-remove-obsolete.md](sprints/sprint-20-backend-remove-obsolete.md) | Remove Sections/Partial modes, Roslyn path, SectionsTemplateParser, ZIP bundle endpoints | `[x] done` |
+| 21 | [sprint-21-backend-workspace-filesystem.md](sprints/sprint-21-backend-workspace-filesystem.md) | Workspace filesystem APIs (folders/files), render by .buelo path, dataSourcePath binding, import resolver, remove global artefact dependency | `[x] done` |
 
 ## Dependency Chain
 
@@ -49,7 +50,9 @@ Sprint 19 (Project-wide Validation)      ← replaces per-file validate trigger
     ↓
 Sprint 20 (Remove Obsolete)              ← clean .buelo-only codebase
     ↓
-[Frontend sprints 18–21 — see BueloWeb/ai/TASKS.md]
+Sprint 21 (Workspace Filesystem + Imports + Data Source Binding)
+    ↓
+[Frontend sprint 22 — see BueloWeb/ai/TASKS.md]
 ```
 
 ## Project Structure (reference)

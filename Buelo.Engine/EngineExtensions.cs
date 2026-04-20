@@ -27,6 +27,8 @@ public static class EngineExtensions
         // TryAdd so that AddBueloFileSystemStore() (or any custom store) registered first takes precedence.
         services.TryAddSingleton<ITemplateStore, InMemoryTemplateStore>();
         services.TryAddSingleton<IGlobalArtefactStore, InMemoryGlobalArtefactStore>();
+        services.TryAddSingleton<IWorkspaceStore>(sp =>
+            new FileSystemWorkspaceStore(ResolveStorePath(sp, rootPath: null)));
         services.TryAddSingleton<IWorkspaceFileEnumerator>(sp =>
             new FileSystemWorkspaceFileEnumerator(ResolveStorePath(sp, rootPath: null)));
         services.AddSingleton<IFileValidator, BueloDslValidator>();
@@ -61,6 +63,12 @@ public static class EngineExtensions
         {
             string path = ResolveStorePath(sp, rootPath);
             return new FileSystemGlobalArtefactStore(path);
+        });
+
+        services.TryAddSingleton<IWorkspaceStore>(sp =>
+        {
+            string path = ResolveStorePath(sp, rootPath);
+            return new FileSystemWorkspaceStore(path);
         });
 
         services.TryAddSingleton<IWorkspaceFileEnumerator>(sp =>

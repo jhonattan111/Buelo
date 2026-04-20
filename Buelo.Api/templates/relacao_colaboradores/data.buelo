@@ -1,0 +1,30 @@
+# New report — edit the components below
+import { } from ""
+@data from ""
+@settings
+  size: A4
+  orientation: Portrait
+  margin: 2cm
+
+report title:
+  text: "My Report"
+  style:
+    fontSize: 18
+    bold: true
+    align: center
+
+page footer:
+  text: "Page {{ page }} of {{ pageCount }}"
+  style:
+    align: center
+    fontSize: 9
+
+data:
+  table:
+    columns:
+      - field: id
+        label: ID
+        width: 10%
+      - field: name
+        label: Name
+        width: 90%

@@ -27,7 +27,8 @@ public record BueloDslProjectConfig(
     int? DefaultFontSize,
     bool? ShowHeader,
     bool? ShowFooter,
-    string? WatermarkText
+    string? WatermarkText,
+    string? DataSourcePath = null
 );
 
 public record BueloDslImport(

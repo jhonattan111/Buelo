@@ -130,6 +130,41 @@ public class ReportControllerTests
         Assert.NotEmpty(file.FileContents);
     }
 
+    [Fact]
+    public async Task RenderFile_WithTemplatePathAndDataSourcePath_RendersPdf()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"buelo-workspace-{Guid.NewGuid()}");
+        try
+        {
+            var workspaceStore = new FileSystemWorkspaceStore(root);
+            await workspaceStore.CreateFolderAsync("reports");
+            await workspaceStore.CreateFolderAsync("data");
+            await workspaceStore.CreateFileAsync("reports/main.buelo", BueloTemplate);
+            await workspaceStore.CreateFileAsync("data/mock.json", "{\"name\":\"Workspace\"}");
+
+            var store = new InMemoryTemplateStore();
+            var engine = new TemplateEngine(new DefaultHelperRegistry(), store, workspaceStore);
+            var controller = new ReportController(engine, store, CreateRegistry(engine));
+
+            var result = await controller.RenderFile(new ReportRequest
+            {
+                TemplatePath = "reports/main.buelo",
+                DataSourcePath = "data/mock.json",
+                FileName = "workspace-report.pdf"
+            });
+
+            var file = Assert.IsType<FileContentResult>(result);
+            Assert.Equal("application/pdf", file.ContentType);
+            Assert.Equal("workspace-report.pdf", file.FileDownloadName);
+            Assert.NotEmpty(file.FileContents);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static OutputRendererRegistry CreateRegistry(TemplateEngine engine)
         => new([new PdfRenderer(engine), new ExcelRenderer()]);
 
