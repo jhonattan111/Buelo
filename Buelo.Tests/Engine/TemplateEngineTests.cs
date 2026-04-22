@@ -125,4 +125,44 @@ public class TemplateEngineTests
         var json = JsonSerializer.Serialize(new { name });
         return JsonSerializer.Deserialize<JsonElement>(json);
     }
+
+    [Fact]
+    public async Task RenderAsync_TypedModelConstructor_ShouldDeserializeAndRender()
+    {
+        // Template with a typed record constructor — previously threw ArgumentException
+        // "Object of type 'ExpandoObject' cannot be converted to type 'InvoiceModel'"
+        const string typedTemplate = """
+            using QuestPDF.Fluent;
+            using QuestPDF.Helpers;
+            using QuestPDF.Infrastructure;
+
+            public record InvoiceModel(string Client, decimal Total);
+
+            public class InvoiceDocument : IDocument
+            {
+                private readonly InvoiceModel _model;
+                public InvoiceDocument(InvoiceModel model) => _model = model;
+
+                public DocumentMetadata GetMetadata() => DocumentMetadata.Default;
+
+                public void Compose(IDocumentContainer container)
+                {
+                    container.Page(page =>
+                    {
+                        page.Size(PageSizes.A4);
+                        page.Margin(2, Unit.Centimetre);
+                        page.Content().Text($"Invoice for {_model.Client}: {_model.Total:C}");
+                    });
+                }
+            }
+            """;
+
+        var engine = new TemplateEngine(new DefaultHelperRegistry());
+        var data = JsonSerializer.Deserialize<JsonElement>("""{ "client": "Acme", "total": 199.99 }""");
+
+        var pdf = await engine.RenderAsync(typedTemplate, data, TemplateMode.FullClass);
+
+        Assert.NotNull(pdf);
+        Assert.NotEmpty(pdf);
+    }
 }

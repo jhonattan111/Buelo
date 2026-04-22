@@ -1,5 +1,7 @@
 using Buelo.Contracts;
+using Buelo.Engine;
 using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
 
 namespace Buelo.Api.Controllers;
 
@@ -121,6 +123,35 @@ public class WorkspaceController(IWorkspaceStore store) : ControllerBase
         catch (Exception ex)
         {
             return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Infers C# record declarations from a .json workspace file.
+    /// Returns a source fragment suitable for injection into Monaco Editor
+    /// so the Roslyn engine can offer IntelliSense on <c>data.</c> access patterns.
+    /// </summary>
+    [HttpGet("types")]
+    public async Task<IActionResult> GetTypeDeclarations([FromQuery] string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return BadRequest(new { error = "Path is required." });
+
+        if (!path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            return BadRequest(new { error = "Only .json files are supported for type inference." });
+
+        var file = await store.GetFileAsync(path);
+        if (file is null)
+            return NotFound(new { error = $"File '{path}' not found." });
+
+        try
+        {
+            var declarations = JsonTypeInferrer.InferCSharpTypes(file.Content);
+            return Ok(new { path, csharpDeclarations = declarations });
+        }
+        catch (JsonException ex)
+        {
+            return BadRequest(new { error = $"Invalid JSON: {ex.Message}" });
         }
     }
 }

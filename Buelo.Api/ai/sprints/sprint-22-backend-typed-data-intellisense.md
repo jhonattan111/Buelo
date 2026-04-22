@@ -13,7 +13,7 @@ Also covers: **report settings persistence** — replacing `sessionStorage` (los
 
 ## Status
 
-`[ ] planned`
+`[x] done`
 
 ## Dependencies
 

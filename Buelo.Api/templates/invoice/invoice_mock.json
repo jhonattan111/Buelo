@@ -1,0 +1,12 @@
+{
+  "invoiceNumber": 1223,
+  "issueDate": "2026-01-03",
+  "dueDate": "2026-01-04",
+  "comments": "teste comentários",
+  "items": [
+    { "name": "Teclado", "price": 15.45, "quantity": 10},
+    { "name": "Mouse", "price": 35.65, "quantity": 4},
+    { "name": "Mousepad", "price": 12.87, "quantity": 7},
+    { "name": "Fone de Ouvido", "price": 155.66, "quantity": 6}
+  ]
+}

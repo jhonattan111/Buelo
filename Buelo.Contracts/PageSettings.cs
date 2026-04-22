@@ -10,6 +10,10 @@ public class PageSettings
     /// Optional workspace-relative JSON file used as data source for .buelo render.
     /// Example: <c>data/mock.json</c>.
     /// </summary>
+    /// <remarks>
+    /// Stored per-file in frontend localStorage under key <c>buelo.reportSettings</c>.
+    /// Sent to the render endpoint as part of <see cref="ReportRequest.PageSettings"/>.
+    /// </remarks>
     public string? DataSourcePath { get; set; }
 
     /// <summary>

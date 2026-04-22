@@ -68,6 +68,7 @@ Engine/
  GlobalArtefactStoreTests.cs
  InMemoryTemplateStoreTests.cs
  JsonFileValidatorTests.cs
+ JsonTypeInferrerTests.cs
  OutputRendererRegistryTests.cs
  PageSettingsEngineTests.cs
  PageSettingsExamples.cs

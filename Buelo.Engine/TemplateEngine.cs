@@ -168,7 +168,7 @@ public class TemplateEngine
 
     private static IDocument CreateDocumentInstance(Type type, object data, PageSettings? pageSettings = null)
     {
-        // Prefer single-parameter constructor (receives dynamic data)
+        // Prefer constructor with the most parameters (data + optional PageSettings)
         var ctor = type.GetConstructors()
             .OrderByDescending(c => c.GetParameters().Length)
             .First();
@@ -177,20 +177,41 @@ public class TemplateEngine
         var args = parameters.Length switch
         {
             0 => Array.Empty<object?>(),
-            1 => new object?[] { data },
             _ => parameters
                 .Select(p =>
                 {
                     if (p.ParameterType == typeof(PageSettings))
                         return (object?)(pageSettings ?? PageSettings.Default());
-                    if (p.ParameterType == typeof(object))
-                        return data;
-                    return null;
+                    return ResolveDataArg(data, p.ParameterType);
                 })
                 .ToArray()
         };
 
         return (IDocument)ctor.Invoke(args);
+    }
+
+    /// <summary>
+    /// Resolves the data argument for a constructor parameter.
+    /// When the target type is a custom model (not object/ExpandoObject), the ExpandoObject
+    /// is round-tripped through JSON so strongly-typed constructors work correctly.
+    /// </summary>
+    private static object? ResolveDataArg(object data, Type targetType)
+    {
+        // dynamic compiles to object; ExpandoObject can be passed as-is
+        if (targetType == typeof(object) || targetType == typeof(ExpandoObject))
+            return data;
+
+        // Already the correct type — no conversion needed
+        if (targetType.IsAssignableFrom(data.GetType()))
+            return data;
+
+        // Round-trip through JSON: ExpandoObject → JSON string → target type
+        // This allows templates to declare typed models (records, classes) as constructor params
+        var json = JsonSerializer.Serialize(data);
+        return JsonSerializer.Deserialize(json, targetType, new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true,
+        });
     }
 
     // ── Data conversion ───────────────────────────────────────────────────────
