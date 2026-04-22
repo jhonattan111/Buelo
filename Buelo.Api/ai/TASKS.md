@@ -33,6 +33,7 @@ Source of truth for backend sprint planning. Each sprint has its own file in `ai
 | B2 | [sprint-2-backend-api-mockdata.md](sprints/sprint-2-backend-api-mockdata.md) | ReportController endpoints completos; mock data flow; render pipeline | `[x] done` |
 | B3 | [sprint-3-backend-global-artefacts.md](sprints/sprint-3-backend-global-artefacts.md) | GlobalArtefactStore como data sources JSON; data binding em templates | `[x] done` |
 | B4 | [sprint-4-backend-multi-format.md](sprints/sprint-4-backend-multi-format.md) | Multi-format output (PDF + Excel); OutputRendererRegistry; performance | `[x] done` |
+| B5 | [sprint-22-backend-typed-data-intellisense.md](sprints/sprint-22-backend-typed-data-intellisense.md) | JsonTypeInferrer; C# type declarations from JSON; `GET /api/workspace/types` | `[ ] planned` |
 
 ## Dependency Chain
 
@@ -46,6 +47,8 @@ Sprint B2 (Report API + Mock Data)
 Sprint B3 (Global Artefacts + Data Sources)
     ↓
 Sprint B4 (Multi-Format Output)
+    ↓
+Sprint B5 (Typed Data IntelliSense — JsonTypeInferrer + /api/workspace/types)
     ↓
 [Frontend sprints F1–F4 — see BueloWeb/ai/TASKS.md]
 ```

@@ -19,7 +19,7 @@ public class Relatorio_40001 : IDocument
     {
         container.Page(page =>
         {
-            page.Size(PageSizes.A4);
+            page.Size(PageSizes.Letter);
             page.Margin(2, Unit.Centimetre);
             page.Header().Text("My Report").FontSize(24);
             page.Content().Column(col =>
