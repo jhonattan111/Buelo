@@ -28,9 +28,9 @@ public class TemplateRecord
 
     /// <summary>
     /// How the template string should be interpreted.
-    /// Defaults to <see cref="TemplateMode.BueloDsl"/>.
+    /// Defaults to <see cref="TemplateMode.FullClass"/>.
     /// </summary>
-    public TemplateMode Mode { get; set; } = TemplateMode.BueloDsl;
+    public TemplateMode Mode { get; set; } = TemplateMode.FullClass;
 
     /// <summary>
     /// Optional JSON Schema string that describes the shape of the data expected by this template.

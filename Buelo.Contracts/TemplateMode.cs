@@ -6,7 +6,8 @@ namespace Buelo.Contracts;
 public enum TemplateMode
 {
     /// <summary>
-    /// The template is authored in the YAML-like <c>.buelo</c> component DSL.
+    /// The template is a complete C# class implementing the QuestPDF <c>IDocument</c> interface.
+    /// The class must be properly formatted and compilable C# code.
     /// </summary>
-    BueloDsl = 3,
+    FullClass = 1,
 }

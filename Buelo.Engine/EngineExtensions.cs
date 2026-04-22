@@ -31,7 +31,6 @@ public static class EngineExtensions
             new FileSystemWorkspaceStore(ResolveStorePath(sp, rootPath: null)));
         services.TryAddSingleton<IWorkspaceFileEnumerator>(sp =>
             new FileSystemWorkspaceFileEnumerator(ResolveStorePath(sp, rootPath: null)));
-        services.AddSingleton<IFileValidator, BueloDslValidator>();
         services.AddSingleton<IFileValidator, JsonFileValidator>();
         services.AddSingleton<IFileValidator, CsharpFileValidator>();
         services.AddSingleton<FileValidatorRegistry>();

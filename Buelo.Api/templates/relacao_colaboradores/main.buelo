@@ -1,14 +1,8 @@
 @project
   pageSize: A4
-  orientation: Portrait
-  marginHorizontal: 2
-  marginVertical: 2
-  backgroundColor: "#FFFFFF"
-  defaultTextColor: "#000000"
-  defaultFontSize: 12
-  showHeader: true
-  showFooter: true
-  dataSourcePath: "relacao_colaboradores/data.json"
+  orientation: undefined
+  showHeader: undefined
+  showFooter: undefined
   outputFormat: pdf
 
 @settings
@@ -16,10 +10,19 @@
   orientation: Portrait
   margin: 2cm
 
+
+footer:
+  footer column:
+    text: "Left"
+  footer column:
+    text: "Right"
+    style:
+      align: right
+
 report title:
   text: "My Report {{(string)name}}"
   style:
-    fontSize: 18
+    fontSize: 25
     bold: true
     align: center
 

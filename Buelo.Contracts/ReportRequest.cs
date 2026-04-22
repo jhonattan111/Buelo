@@ -3,25 +3,25 @@ namespace Buelo.Contracts;
 public class ReportRequest
 {
     /// <summary>
-    /// Optional workspace-relative .buelo file path.
-    /// When provided, the render pipeline can load template source from the workspace.
+    /// The C# template source code that implements <c>IDocument</c>.
     /// </summary>
-    public string? TemplatePath { get; set; }
+    public string Template { get; set; } = string.Empty;
 
     /// <summary>
-    /// Optional workspace-relative JSON file path used as data source override.
+    /// Output file name for the rendered report.
     /// </summary>
-    public string? DataSourcePath { get; set; }
-
-    public string Template { get; set; } = string.Empty;
     public string FileName { get; set; } = "report.pdf";
+
+    /// <summary>
+    /// The data object to bind to the template for rendering.
+    /// </summary>
     public object Data { get; set; } = default!;
 
     /// <summary>
     /// How the template string should be interpreted.
-    /// Defaults to <see cref="TemplateMode.BueloDsl"/>.
+    /// Defaults to <see cref="TemplateMode.FullClass"/>.
     /// </summary>
-    public TemplateMode Mode { get; set; } = TemplateMode.BueloDsl;
+    public TemplateMode Mode { get; set; } = TemplateMode.FullClass;
 
     /// <summary>
     /// Optional page configuration settings for PDF layout.
