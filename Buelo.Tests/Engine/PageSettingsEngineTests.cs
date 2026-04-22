@@ -1,7 +1,6 @@
 using System.Text.Json;
 using Buelo.Contracts;
 using Buelo.Engine;
-using Buelo.Engine.BueloDsl;
 using QuestPDF;
 using QuestPDF.Infrastructure;
 
@@ -9,6 +8,22 @@ namespace Buelo.Tests.Engine;
 
 public class PageSettingsTests
 {
+    private const string ValidTemplate = """
+        using QuestPDF.Fluent;
+        using QuestPDF.Helpers;
+        using QuestPDF.Infrastructure;
+        public class HelloDocument : IDocument
+        {
+            private readonly dynamic _data;
+            public HelloDocument(dynamic data) => _data = data;
+            public DocumentMetadata GetMetadata() => DocumentMetadata.Default;
+            public void Compose(IDocumentContainer container)
+            {
+                container.Page(page => { page.Size(PageSizes.A4); page.Margin(2, Unit.Centimetre); page.Content().Text($"Hello {_data.name}"); });
+            }
+        }
+        """;
+
     public PageSettingsTests()
     {
         Settings.License = LicenseType.Community;
@@ -59,11 +74,9 @@ public class PageSettingsTests
     public async Task Template_WithDefaultPageSettings_ShouldRenderSuccessfully()
     {
         var engine = new TemplateEngine(new DefaultHelperRegistry());
-
-        var template = "report title:\n  text: Hello";
         var data = CreateJsonData("test");
 
-        var pdf = await engine.RenderAsync(template, data, TemplateMode.BueloDsl);
+        var pdf = await engine.RenderAsync(ValidTemplate, data, TemplateMode.FullClass);
 
         Assert.NotEmpty(pdf);
     }
@@ -81,10 +94,9 @@ public class PageSettingsTests
             WatermarkText = "DRAFT"
         };
 
-        var template = "report title:\n  text: Hello";
         var data = CreateJsonData("test");
 
-        var pdf = await engine.RenderAsync(template, data, TemplateMode.BueloDsl, customSettings);
+        var pdf = await engine.RenderAsync(ValidTemplate, data, TemplateMode.FullClass, customSettings);
 
         Assert.NotEmpty(pdf);
     }
@@ -96,8 +108,8 @@ public class PageSettingsTests
         {
             Id = Guid.NewGuid(),
             Name = "Test",
-            Template = "report title:\n  text: Hello",
-            Mode = TemplateMode.BueloDsl
+            Template = ValidTemplate,
+            Mode = TemplateMode.FullClass
         };
 
         Assert.NotNull(template.PageSettings);
@@ -113,8 +125,8 @@ public class PageSettingsTests
         var template = new TemplateRecord
         {
             Name = "Test",
-            Template = "report title:\n  text: Hello",
-            Mode = TemplateMode.BueloDsl,
+            Template = ValidTemplate,
+            Mode = TemplateMode.FullClass,
             PageSettings = PageSettings.Default()
         };
 
@@ -127,7 +139,7 @@ public class PageSettingsTests
     }
 
     [Fact]
-    public void PageSettings_Cascade_TemplateThenProjectInlineThenRequest()
+    public void PageSettings_MergeSettings_RequestOverridesTemplate()
     {
         var templateSettings = new PageSettings
         {
@@ -139,19 +151,6 @@ public class PageSettingsTests
             ShowFooter = true
         };
 
-        var inlineProject = new BueloDslProjectConfig(
-            PageSize: "A4",
-            Orientation: null,
-            MarginHorizontal: 2.0,
-            MarginVertical: 2.5,
-            BackgroundColor: "#FFFFFF",
-            DefaultTextColor: null,
-            DefaultFontSize: null,
-            ShowHeader: false,
-            ShowFooter: null,
-            WatermarkText: "CONFIDENTIAL"
-        );
-
         var requestSettings = new PageSettings
         {
             PageSize = "A3",
@@ -162,20 +161,13 @@ public class PageSettingsTests
             ShowFooter = false
         };
 
-        var withInline = TemplateEngine.ApplyProjectConfigSettings(templateSettings, inlineProject);
-        var effective = TemplateEngine.MergeSettings(withInline, requestSettings);
+        var effective = TemplateEngine.MergeSettings(templateSettings, requestSettings);
 
-        // Request-level overrides still have the highest precedence.
         Assert.Equal("A3", effective.PageSize);
         Assert.Equal(3.0f, effective.MarginHorizontal);
-        Assert.Equal(3.0f, effective.MarginVertical);
         Assert.Equal("#000000", effective.BackgroundColor);
         Assert.True(effective.ShowHeader);
         Assert.False(effective.ShowFooter);
-
-        // Inline @project values are visible before request override.
-        Assert.Equal("CONFIDENTIAL", withInline.WatermarkText);
-        Assert.False(withInline.ShowHeader);
     }
 
     [Fact]

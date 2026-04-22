@@ -1,4 +1,4 @@
-using Buelo.Contracts;
+﻿using Buelo.Contracts;
 using Buelo.Engine;
 
 namespace Buelo.Tests.Engine;
@@ -22,7 +22,7 @@ public class TemplateVersioningTests : IDisposable
             Directory.Delete(_fsRoot, recursive: true);
     }
 
-    // ── InMemoryTemplateStore ────────────────────────────────────────────────
+    // â”€â”€ InMemoryTemplateStore â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     [Fact]
     public async Task InMemory_FirstSave_CreatesNoVersions()
@@ -127,7 +127,7 @@ public class TemplateVersioningTests : IDisposable
         Assert.Empty(versions);
     }
 
-    // ── FileSystemTemplateStore ──────────────────────────────────────────────
+    // â”€â”€ FileSystemTemplateStore â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     [Fact]
     public async Task FileSystem_FirstSave_NoVersionDirectory()
@@ -182,7 +182,7 @@ public class TemplateVersioningTests : IDisposable
         Assert.Null(result);
     }
 
-    // ── Restore via API-layer simulation ─────────────────────────────────────
+    // â”€â”€ Restore via API-layer simulation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     [Fact]
     public async Task InMemory_RestoreVersion_RewindsTemplateAndCreatesNewVersion()
@@ -212,12 +212,12 @@ public class TemplateVersioningTests : IDisposable
         Assert.Equal(2, allVersions.Count);
     }
 
-    // ── Helpers ──────────────────────────────────────────────────────────────
+    // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private static TemplateRecord Build(string templateSource) => new()
     {
         Name = "Versioning Test",
         Template = templateSource,
-        Mode = TemplateMode.BueloDsl
+        Mode = TemplateMode.FullClass
     };
 }

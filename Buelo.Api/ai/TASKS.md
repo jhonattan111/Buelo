@@ -29,10 +29,10 @@ Source of truth for backend sprint planning. Each sprint has its own file in `ai
 
 | Sprint | File | Goal | Status |
 |--------|------|------|--------|
-| B1 | [sprint-1-backend-core-engine.md](sprints/sprint-1-backend-core-engine.md) | TemplateEngine com C# IDocument; Roslyn compilation; validação; PageSettings | `[ ] pending` |
-| B2 | [sprint-2-backend-api-mockdata.md](sprints/sprint-2-backend-api-mockdata.md) | ReportController endpoints completos; mock data flow; render pipeline | `[ ] pending` |
-| B3 | [sprint-3-backend-global-artefacts.md](sprints/sprint-3-backend-global-artefacts.md) | GlobalArtefactStore como data sources JSON; data binding em templates | `[ ] pending` |
-| B4 | [sprint-4-backend-multi-format.md](sprints/sprint-4-backend-multi-format.md) | Multi-format output (PDF + Excel); OutputRendererRegistry; performance | `[ ] pending` |
+| B1 | [sprint-1-backend-core-engine.md](sprints/sprint-1-backend-core-engine.md) | TemplateEngine com C# IDocument; Roslyn compilation; validação; PageSettings | `[x] done` |
+| B2 | [sprint-2-backend-api-mockdata.md](sprints/sprint-2-backend-api-mockdata.md) | ReportController endpoints completos; mock data flow; render pipeline | `[x] done` |
+| B3 | [sprint-3-backend-global-artefacts.md](sprints/sprint-3-backend-global-artefacts.md) | GlobalArtefactStore como data sources JSON; data binding em templates | `[x] done` |
+| B4 | [sprint-4-backend-multi-format.md](sprints/sprint-4-backend-multi-format.md) | Multi-format output (PDF + Excel); OutputRendererRegistry; performance | `[x] done` |
 
 ## Dependency Chain
 

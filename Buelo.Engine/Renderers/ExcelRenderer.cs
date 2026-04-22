@@ -1,197 +1,157 @@
-using Buelo.Contracts;
-using Buelo.Engine.BueloDsl;
+﻿using Buelo.Contracts;
 using ClosedXML.Excel;
-using System.Text.Json;
 
 namespace Buelo.Engine.Renderers;
 
+/// <summary>
+/// Generates an Excel workbook (.xlsx) from the request data.
+/// Each top-level array in the JSON data becomes a separate worksheet.
+/// For a flat object, key-value pairs are written to a single sheet.
+/// </summary>
 public class ExcelRenderer : IOutputRenderer
 {
     public string Format => "excel";
     public string ContentType => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     public string FileExtension => ".xlsx";
 
-    public bool SupportsMode(TemplateMode mode) => mode == TemplateMode.BueloDsl;
+    public bool SupportsMode(TemplateMode mode) => mode == TemplateMode.FullClass;
 
     public Task<byte[]> RenderAsync(RendererInput input, CancellationToken cancellationToken = default)
     {
         if (!SupportsMode(input.Mode))
-            throw new NotSupportedException("Excel rendering requires .buelo DSL mode.");
-
-        var doc = input.BueloDslDocument ?? BueloDslParser.Parse(input.Source);
-
-        input.FormatHints.TryGetValue("excel.sheetName", out var sheetName);
-        sheetName = string.IsNullOrWhiteSpace(sheetName) ? "Sheet1" : sheetName;
+            throw new NotSupportedException($"ExcelRenderer does not support mode '{input.Mode}'.");
 
         using var workbook = new XLWorkbook();
-        var ws = workbook.Worksheets.Add(sheetName);
 
-        int currentRow = 1;
-
-        foreach (var comp in doc.Components)
-        {
-            if (comp is not BueloDslLayoutComponent layout) continue;
-
-            var typeLower = layout.ComponentType.ToLowerInvariant();
-
-            // Title / resume → merged text row.
-            if (typeLower is "report title" or "report resume")
-            {
-                foreach (var child in layout.Children.OfType<BueloDslTextComponent>())
-                {
-                    var cell = ws.Cell(currentRow++, 1);
-                    cell.Value = StripExpressions(child.Value);
-                    cell.Style.Font.Bold = true;
-                }
-                continue;
-            }
-
-            // Page header/footer → skip in Excel.
-            if (typeLower is "page header" or "page footer" or "header" or "footer")
-                continue;
-
-            // Data / group header → render tables inside.
-            foreach (var child in layout.Children.OfType<BueloDslTableComponent>())
-            {
-                currentRow = RenderTable(ws, child, input.RawData, currentRow);
-            }
-        }
-
-        ws.Columns().AdjustToContents();
+        var dynData = TemplateEngine.ConvertToDynamic(input.RawData ?? new { });
+        RenderToWorkbook(workbook, dynData, input.PageSettings);
 
         using var stream = new MemoryStream();
         workbook.SaveAs(stream);
         return Task.FromResult(stream.ToArray());
     }
 
-    // ── Table rendering ───────────────────────────────────────────────────────
+    // ── Workbook population ───────────────────────────────────────────────────
 
-    private static int RenderTable(IXLWorksheet ws, BueloDslTableComponent table, object? rawData, int startRow)
+    private static void RenderToWorkbook(XLWorkbook wb, object data, PageSettings settings)
     {
-        // Write column headers.
-        for (int col = 0; col < table.Columns.Count; col++)
+        if (data is IList<object> list)
         {
-            var cell = ws.Cell(startRow, col + 1);
-            cell.Value = table.Columns[col].Label;
-            cell.Style.Font.Bold = true;
-            if (table.HeaderStyle?.BackgroundColor is { } bg)
-                cell.Style.Fill.BackgroundColor = XLColor.FromHtml(bg);
+            RenderListToSheet(wb.Worksheets.Add("Data"), list);
         }
-        startRow++;
-
-        // Write data rows.
-        var rows = ToJsonRows(rawData);
-        foreach (var row in rows)
+        else if (data is IDictionary<string, object> dict)
         {
-            for (int col = 0; col < table.Columns.Count; col++)
+            bool hasArraySheets = false;
+            foreach (var (key, value) in dict)
             {
-                var column = table.Columns[col];
-                var cell = ws.Cell(startRow, col + 1);
-                SetCellValue(cell, row, column.Field, column.Format);
-            }
-            startRow++;
-        }
-
-        return startRow;
-    }
-
-    private static void SetCellValue(IXLCell cell, JsonElement row, string field, string? format)
-    {
-        if (!row.TryGetProperty(field, out var value))
-        {
-            // Try case-insensitive property lookup.
-            foreach (var prop in row.EnumerateObject())
-            {
-                if (string.Equals(prop.Name, field, StringComparison.OrdinalIgnoreCase))
+                if (value is IList<object> items && items.Count > 0)
                 {
-                    value = prop.Value;
-                    break;
+                    RenderListToSheet(wb.Worksheets.Add(SheetName(key)), items);
+                    hasArraySheets = true;
                 }
             }
+
+            if (!hasArraySheets)
+                RenderFlatDictToSheet(wb.Worksheets.Add("Data"), dict);
+        }
+        else
+        {
+            var ws = wb.Worksheets.Add("Data");
+            ws.Cell(1, 1).Value = data?.ToString() ?? string.Empty;
         }
 
-        if (value.ValueKind == JsonValueKind.Undefined)
+        if (!wb.Worksheets.Any())
+            wb.Worksheets.Add("Empty");
+    }
+
+    private static void RenderListToSheet(IXLWorksheet ws, IList<object> list)
+    {
+        if (list.Count == 0)
         {
-            cell.Value = string.Empty;
+            ws.Cell(1, 1).Value = "(empty)";
             return;
         }
 
-        switch (value.ValueKind)
+        // Collect column names from all row dictionaries
+        var columns = list
+            .OfType<IDictionary<string, object>>()
+            .SelectMany(r => r.Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (columns.Count == 0)
         {
-            case JsonValueKind.Number:
-                var num = value.GetDecimal();
-                cell.Value = num;
-                if (string.Equals(format, "currency", StringComparison.OrdinalIgnoreCase))
-                    cell.Style.NumberFormat.SetFormat("R$ #,##0.00");
-                else if (string.Equals(format, "date", StringComparison.OrdinalIgnoreCase))
-                    cell.Style.NumberFormat.SetFormat("dd/MM/yyyy");
-                break;
+            // Scalar list
+            ws.Cell(1, 1).Value = "Value";
+            ws.Cell(1, 1).Style.Font.Bold = true;
+            for (int i = 0; i < list.Count; i++)
+                ws.Cell(i + 2, 1).Value = list[i]?.ToString() ?? string.Empty;
+            ws.Column(1).AdjustToContents();
+            return;
+        }
 
-            case JsonValueKind.True:
-                cell.Value = true;
-                break;
+        // Header row
+        for (int c = 0; c < columns.Count; c++)
+        {
+            var cell = ws.Cell(1, c + 1);
+            cell.Value = columns[c];
+            cell.Style.Font.Bold = true;
+            cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#E8F0FE");
+        }
 
-            case JsonValueKind.False:
-                cell.Value = false;
-                break;
+        // Data rows
+        int row = 2;
+        foreach (var item in list)
+        {
+            if (item is not IDictionary<string, object> rowDict) continue;
+            for (int c = 0; c < columns.Count; c++)
+            {
+                rowDict.TryGetValue(columns[c], out var val);
+                SetCellValue(ws.Cell(row, c + 1), val);
+            }
+            row++;
+        }
 
-            case JsonValueKind.Null:
-                cell.Value = string.Empty;
-                break;
+        ws.Range(1, 1, 1, columns.Count).SetAutoFilter();
+        ws.Columns().AdjustToContents();
+    }
 
-            default:
-                var str = value.GetString() ?? string.Empty;
-                // Try parsing as date.
-                if (string.Equals(format, "date", StringComparison.OrdinalIgnoreCase) &&
-                    DateTimeOffset.TryParse(str, out var dt))
-                {
-                    cell.Value = dt.DateTime;
-                    cell.Style.NumberFormat.SetFormat("dd/MM/yyyy");
-                }
-                else
-                {
-                    cell.Value = str;
-                }
-                break;
+    private static void RenderFlatDictToSheet(IXLWorksheet ws, IDictionary<string, object> dict)
+    {
+        ws.Cell(1, 1).Value = "Property";
+        ws.Cell(1, 2).Value = "Value";
+        ws.Cell(1, 1).Style.Font.Bold = true;
+        ws.Cell(1, 2).Style.Font.Bold = true;
+
+        int row = 2;
+        foreach (var (key, value) in dict)
+        {
+            ws.Cell(row, 1).Value = key;
+            SetCellValue(ws.Cell(row, 2), value);
+            row++;
+        }
+
+        ws.Columns().AdjustToContents();
+    }
+
+    private static void SetCellValue(IXLCell cell, object? value)
+    {
+        switch (value)
+        {
+            case null: break;
+            case bool b: cell.Value = b; break;
+            case long l: cell.Value = l; break;
+            case double d: cell.Value = d; break;
+            case DateTime dt: cell.Value = dt; cell.Style.NumberFormat.Format = "yyyy-MM-dd"; break;
+            case IList<object>: cell.Value = "[array]"; break;
+            case IDictionary<string, object>: cell.Value = "[object]"; break;
+            default: cell.Value = value.ToString(); break;
         }
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private static IEnumerable<JsonElement> ToJsonRows(object? rawData)
+    private static string SheetName(string key)
     {
-        if (rawData is null) yield break;
-
-        JsonElement element;
-        if (rawData is JsonElement je)
-            element = je;
-        else
-        {
-            var json = JsonSerializer.Serialize(rawData);
-            element = JsonSerializer.Deserialize<JsonElement>(json);
-        }
-
-        if (element.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in element.EnumerateArray())
-                yield return item;
-        }
-        else if (element.ValueKind == JsonValueKind.Object)
-        {
-            yield return element;
-        }
-    }
-
-    private static string StripExpressions(string text)
-    {
-        // Remove {{ ... }} expression placeholders.
-        int start;
-        while ((start = text.IndexOf("{{", StringComparison.Ordinal)) >= 0)
-        {
-            int end = text.IndexOf("}}", start + 2, StringComparison.Ordinal);
-            if (end < 0) break;
-            text = text[..start] + text[(end + 2)..];
-        }
-        return text.Trim();
+        var name = key.Length > 31 ? key[..31] : key;
+        return string.Concat(name.Select(c => char.IsLetterOrDigit(c) || c == '_' || c == ' ' ? c : '_'));
     }
 }

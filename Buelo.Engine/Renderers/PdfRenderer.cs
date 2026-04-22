@@ -15,13 +15,13 @@ public class PdfRenderer : IOutputRenderer
     public string ContentType => "application/pdf";
     public string FileExtension => ".pdf";
 
-    public bool SupportsMode(TemplateMode mode) => mode == TemplateMode.BueloDsl;
+    public bool SupportsMode(TemplateMode mode) => mode == TemplateMode.FullClass;
 
     public Task<byte[]> RenderAsync(RendererInput input, CancellationToken cancellationToken = default)
     {
         if (!SupportsMode(input.Mode))
-            throw new NotSupportedException("PDF rendering requires .buelo DSL mode.");
+            throw new NotSupportedException($"PDF rendering requires FullClass mode. Got '{input.Mode}'.");
 
-        return _engine.RenderAsync(input.Source, input.RawData!, input.Mode, input.PageSettings);
+        return _engine.RenderAsync(input.Source, input.RawData ?? new { }, input.Mode, input.PageSettings);
     }
 }

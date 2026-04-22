@@ -66,6 +66,7 @@ obj/Debug/net10.0/
  Buelo.Api.AssemblyInfo.cs
  Buelo.Api.GlobalUsings.g.cs
 Program.cs
+templates/relacao_colaboradores/teste.cs
 
 [metadataReferences]
 ../

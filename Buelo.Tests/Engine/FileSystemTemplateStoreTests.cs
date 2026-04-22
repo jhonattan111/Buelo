@@ -1,4 +1,4 @@
-using Buelo.Contracts;
+﻿using Buelo.Contracts;
 using Buelo.Engine;
 
 namespace Buelo.Tests.Engine;
@@ -20,7 +20,7 @@ public class FileSystemTemplateStoreTests : IDisposable
             Directory.Delete(_root, recursive: true);
     }
 
-    // ── SaveAsync / GetAsync round-trip ──────────────────────────────────────
+    // â”€â”€ SaveAsync / GetAsync round-trip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     [Fact]
     public async Task SaveAsync_NewTemplate_AssignsIdAndPersists()
@@ -35,7 +35,7 @@ public class FileSystemTemplateStoreTests : IDisposable
         Assert.Equal(saved.Id, retrieved.Id);
         Assert.Equal("Test Template", retrieved.Name);
         Assert.Equal("page.Content().Text(\"hello\");", retrieved.Template);
-        Assert.Equal(TemplateMode.BueloDsl, retrieved.Mode);
+        Assert.Equal(TemplateMode.FullClass, retrieved.Mode);
     }
 
     [Fact]
@@ -58,7 +58,7 @@ public class FileSystemTemplateStoreTests : IDisposable
         Assert.Equal("{ \"type\": \"object\" }", retrieved.DataSchema);
     }
 
-    // ── Artefact persistence ─────────────────────────────────────────────────
+    // â”€â”€ Artefact persistence â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     [Fact]
     public async Task SaveAsync_WithArtefacts_PersistsAndReloads()
@@ -159,7 +159,7 @@ public class FileSystemTemplateStoreTests : IDisposable
         Assert.True(File.Exists(artefactFile));
     }
 
-    // ── ListAsync ────────────────────────────────────────────────────────────
+    // â”€â”€ ListAsync â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     [Fact]
     public async Task ListAsync_ReturnsAllSavedTemplates()
@@ -183,7 +183,7 @@ public class FileSystemTemplateStoreTests : IDisposable
         Assert.Empty(all);
     }
 
-    // ── DeleteAsync ──────────────────────────────────────────────────────────
+    // â”€â”€ DeleteAsync â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     [Fact]
     public async Task DeleteAsync_ExistingTemplate_RemovesDirectory()
@@ -206,7 +206,7 @@ public class FileSystemTemplateStoreTests : IDisposable
         Assert.False(result);
     }
 
-    // ── GetAsync ─────────────────────────────────────────────────────────────
+    // â”€â”€ GetAsync â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     [Fact]
     public async Task GetAsync_NonExistentId_ReturnsNull()
@@ -215,12 +215,12 @@ public class FileSystemTemplateStoreTests : IDisposable
         Assert.Null(result);
     }
 
-    // ── Helpers ──────────────────────────────────────────────────────────────
+    // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private static TemplateRecord BuildTemplate(string name = "Test Template") => new()
     {
         Name = name,
         Template = "page.Content().Text(\"hello\");",
-        Mode = TemplateMode.BueloDsl
+        Mode = TemplateMode.FullClass
     };
 }

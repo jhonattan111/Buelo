@@ -1,4 +1,4 @@
-using Buelo.Contracts;
+﻿using Buelo.Contracts;
 using Buelo.Engine;
 using Buelo.Engine.Validators;
 
@@ -104,7 +104,6 @@ public class ProjectValidationTests
 
     private static FileValidatorRegistry CreateRegistry() => new(
     [
-        new BueloDslValidator(),
         new JsonFileValidator(),
         new CsharpFileValidator()
     ]);
@@ -116,3 +115,4 @@ public class ProjectValidationTests
         return root;
     }
 }
+

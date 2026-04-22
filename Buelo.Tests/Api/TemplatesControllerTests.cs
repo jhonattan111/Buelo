@@ -16,14 +16,14 @@ public class TemplatesControllerTests
         var result = await controller.Create(new TemplateRecord
         {
             Name = "Invoice",
-            Mode = TemplateMode.BueloDsl,
-            Template = "report title:\n  text: Invoice"
+            Mode = TemplateMode.FullClass,
+            Template = "// C# report template"
         });
 
         var created = Assert.IsType<CreatedAtActionResult>(result);
         var saved = Assert.IsType<TemplateRecord>(created.Value);
         Assert.NotEqual(Guid.Empty, saved.Id);
-        Assert.Equal(TemplateMode.BueloDsl, saved.Mode);
+        Assert.Equal(TemplateMode.FullClass, saved.Mode);
         Assert.Equal(nameof(TemplatesController.Get), created.ActionName);
     }
 
@@ -34,8 +34,8 @@ public class TemplatesControllerTests
         var saved = await store.SaveAsync(new TemplateRecord
         {
             Name = "Files",
-            Template = "report title:\n  text: hello",
-            Mode = TemplateMode.BueloDsl,
+            Template = "// C# report template",
+            Mode = TemplateMode.FullClass,
             MockData = new { name = "Alice" },
             Artefacts =
             [
@@ -65,19 +65,19 @@ public class TemplatesControllerTests
         {
             Name = "Mode",
             Template = "old",
-            Mode = TemplateMode.BueloDsl
+            Mode = TemplateMode.FullClass
         });
 
         var controller = new TemplatesController(store);
         var result = await controller.UpsertFile(
             saved.Id,
-            new UpsertTemplateFileRequest("template.report.cs", "report title:\n  text: Updated", "template", "BueloDsl"));
+            new UpsertTemplateFileRequest("template.report.cs", "// Updated template", "template", "FullClass"));
 
         Assert.IsType<OkObjectResult>(result);
 
         var reloaded = await store.GetAsync(saved.Id);
         Assert.NotNull(reloaded);
-        Assert.Equal("report title:\n  text: Updated", reloaded.Template);
-        Assert.Equal(TemplateMode.BueloDsl, reloaded.Mode);
+        Assert.Equal("// Updated template", reloaded.Template);
+        Assert.Equal(TemplateMode.FullClass, reloaded.Mode);
     }
 }

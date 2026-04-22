@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Buelo.Api.Controllers;
 using Buelo.Contracts;
 using Buelo.Engine;
@@ -11,10 +11,29 @@ namespace Buelo.Tests.Api;
 
 public class ReportControllerTests
 {
-    private const string BueloTemplate = """
-        report title:
-          text: "Hello {{ data.name }}"
+    private const string ValidTemplate = """
+        using QuestPDF.Fluent;
+        using QuestPDF.Helpers;
+        using QuestPDF.Infrastructure;
+
+        public class HelloDocument : IDocument
+        {
+            private readonly dynamic _data;
+            public HelloDocument(dynamic data) => _data = data;
+            public DocumentMetadata GetMetadata() => DocumentMetadata.Default;
+            public void Compose(IDocumentContainer container)
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4);
+                    page.Margin(2, Unit.Centimetre);
+                    page.Content().Text($"Hello {_data.name}");
+                });
+            }
+        }
         """;
+
+    private const string InvalidTemplate = "public class Bad { public void foo( }";
 
     public ReportControllerTests()
     {
@@ -27,10 +46,10 @@ public class ReportControllerTests
         var controller = CreateController();
         var request = new ReportRequest
         {
-            Template = BueloTemplate,
+            Template = ValidTemplate,
             FileName = "hello.pdf",
             Data = CreateJsonData("World"),
-            Mode = TemplateMode.BueloDsl
+            Mode = TemplateMode.FullClass
         };
 
         var result = await controller.Render(request);
@@ -39,6 +58,23 @@ public class ReportControllerTests
         Assert.Equal("application/pdf", file.ContentType);
         Assert.Equal("hello.pdf", file.FileDownloadName);
         Assert.NotEmpty(file.FileContents);
+    }
+
+    [Fact]
+    public async Task Render_InvalidTemplate_ShouldReturnBadRequest()
+    {
+        var controller = CreateController();
+        var request = new ReportRequest
+        {
+            Template = InvalidTemplate,
+            FileName = "report.pdf",
+            Data = CreateJsonData("Test"),
+            Mode = TemplateMode.FullClass
+        };
+
+        var result = await controller.Render(request);
+
+        Assert.IsType<BadRequestObjectResult>(result);
     }
 
     [Fact]
@@ -58,8 +94,8 @@ public class ReportControllerTests
         var template = await store.SaveAsync(new TemplateRecord
         {
             Name = "FormatFromTemplate",
-            Template = BueloTemplate,
-            Mode = TemplateMode.BueloDsl,
+            Template = ValidTemplate,
+            Mode = TemplateMode.FullClass,
             DefaultFileName = "mock.pdf",
             MockData = CreateJsonData("Fallback"),
             OutputFormat = OutputFormat.Excel
@@ -76,13 +112,13 @@ public class ReportControllerTests
     }
 
     [Fact]
-    public async Task Validate_ValidBueloTemplate_ReturnsValidTrue()
+    public async Task Validate_ValidTemplate_ReturnsValidTrue()
     {
         var controller = CreateController();
         var request = new ReportValidateRequest
         {
-            Template = BueloTemplate,
-            Mode = TemplateMode.BueloDsl
+            Template = ValidTemplate,
+            Mode = TemplateMode.FullClass
         };
 
         var result = await controller.Validate(request);
@@ -94,13 +130,13 @@ public class ReportControllerTests
     }
 
     [Fact]
-    public async Task Validate_InvalidBueloTemplate_ReturnsValidFalseWithErrors()
+    public async Task Validate_InvalidTemplate_ReturnsValidFalseWithErrors()
     {
         var controller = CreateController();
         var request = new ReportValidateRequest
         {
-            Template = "report title:\n  text: \"{{ unclosed\"",
-            Mode = TemplateMode.BueloDsl
+            Template = InvalidTemplate,
+            Mode = TemplateMode.FullClass
         };
 
         var result = await controller.Validate(request);
@@ -112,15 +148,15 @@ public class ReportControllerTests
     }
 
     [Fact]
-    public async Task PostRender_FormatExcel_WithBueloDsl_ReturnsXlsxContentType()
+    public async Task Render_FormatExcel_ReturnsXlsxContentType()
     {
         var controller = CreateController();
         var request = new ReportRequest
         {
-            Template = BueloTemplate,
+            Template = ValidTemplate,
             FileName = "report",
             Data = CreateJsonData("Test"),
-            Mode = TemplateMode.BueloDsl
+            Mode = TemplateMode.FullClass
         };
 
         var result = await controller.Render(request, format: "excel");
@@ -128,41 +164,6 @@ public class ReportControllerTests
         var file = Assert.IsType<FileContentResult>(result);
         Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", file.ContentType);
         Assert.NotEmpty(file.FileContents);
-    }
-
-    [Fact]
-    public async Task RenderFile_WithTemplatePathAndDataSourcePath_RendersPdf()
-    {
-        var root = Path.Combine(Path.GetTempPath(), $"buelo-workspace-{Guid.NewGuid()}");
-        try
-        {
-            var workspaceStore = new FileSystemWorkspaceStore(root);
-            await workspaceStore.CreateFolderAsync("reports");
-            await workspaceStore.CreateFolderAsync("data");
-            await workspaceStore.CreateFileAsync("reports/main.buelo", BueloTemplate);
-            await workspaceStore.CreateFileAsync("data/mock.json", "{\"name\":\"Workspace\"}");
-
-            var store = new InMemoryTemplateStore();
-            var engine = new TemplateEngine(new DefaultHelperRegistry(), store, workspaceStore);
-            var controller = new ReportController(engine, store, CreateRegistry(engine));
-
-            var result = await controller.RenderFile(new ReportRequest
-            {
-                TemplatePath = "reports/main.buelo",
-                DataSourcePath = "data/mock.json",
-                FileName = "workspace-report.pdf"
-            });
-
-            var file = Assert.IsType<FileContentResult>(result);
-            Assert.Equal("application/pdf", file.ContentType);
-            Assert.Equal("workspace-report.pdf", file.FileDownloadName);
-            Assert.NotEmpty(file.FileContents);
-        }
-        finally
-        {
-            if (Directory.Exists(root))
-                Directory.Delete(root, recursive: true);
-        }
     }
 
     private static OutputRendererRegistry CreateRegistry(TemplateEngine engine)

@@ -9,9 +9,20 @@ namespace Buelo.Tests.Engine;
 
 public class PdfRendererTests
 {
-    private const string BueloDslSource = """
-        report title:
-          text: Hello World
+    private const string ValidTemplate = """
+        using QuestPDF.Fluent;
+        using QuestPDF.Helpers;
+        using QuestPDF.Infrastructure;
+        public class HelloDocument : IDocument
+        {
+            private readonly dynamic _data;
+            public HelloDocument(dynamic data) => _data = data;
+            public DocumentMetadata GetMetadata() => DocumentMetadata.Default;
+            public void Compose(IDocumentContainer container)
+            {
+                container.Page(page => { page.Size(PageSizes.A4); page.Margin(2, Unit.Centimetre); page.Content().Text($"Hello {_data.name}"); });
+            }
+        }
         """;
 
     public PdfRendererTests()
@@ -29,13 +40,13 @@ public class PdfRendererTests
     }
 
     [Fact]
-    public async Task RenderAsync_BueloDslMode_ReturnsPdfBytes()
+    public async Task RenderAsync_FullClassMode_ReturnsPdfBytes()
     {
         var renderer = CreateRenderer();
         var input = new RendererInput
         {
-            Source = BueloDslSource,
-            Mode = TemplateMode.BueloDsl,
+            Source = ValidTemplate,
+            Mode = TemplateMode.FullClass,
             RawData = JsonData("World"),
             PageSettings = PageSettings.Default()
         };
@@ -51,7 +62,7 @@ public class PdfRendererTests
         var renderer = CreateRenderer();
         var input = new RendererInput
         {
-            Source = BueloDslSource,
+            Source = ValidTemplate,
             Mode = (TemplateMode)999,
             RawData = JsonData("World"),
             PageSettings = PageSettings.Default()
@@ -61,10 +72,10 @@ public class PdfRendererTests
     }
 
     [Fact]
-    public void SupportsMode_OnlyBueloDsl_ReturnsExpectedValues()
+    public void SupportsMode_FullClass_ReturnsTrue()
     {
         var renderer = CreateRenderer();
-        Assert.True(renderer.SupportsMode(TemplateMode.BueloDsl));
+        Assert.True(renderer.SupportsMode(TemplateMode.FullClass));
         Assert.False(renderer.SupportsMode((TemplateMode)999));
     }
 }

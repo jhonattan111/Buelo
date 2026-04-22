@@ -1,38 +1,14 @@
-using Buelo.Contracts;
+﻿using Buelo.Contracts;
 using Buelo.Engine;
-using Buelo.Engine.BueloDsl;
 using Buelo.Engine.Renderers;
+using System.Text.Json;
 using QuestPDF;
 using QuestPDF.Infrastructure;
-using System.Text.Json;
 
 namespace Buelo.Tests.Engine;
 
 public class ExcelRendererTests
 {
-    private static readonly string TableSource = """
-        data:
-          table:
-            columns:
-              - field: name
-                label: Name
-              - field: salary
-                label: Salary
-                format: currency
-        """;
-
-    private static readonly string TitleAndTableSource = """
-        report title:
-          text: Employee Report
-        data:
-          table:
-            columns:
-              - field: name
-                label: Employee Name
-              - field: department
-                label: Department
-        """;
-
     public ExcelRendererTests()
     {
         Settings.License = LicenseType.Community;
@@ -46,16 +22,20 @@ public class ExcelRendererTests
         return JsonSerializer.Deserialize<JsonElement>(json);
     }
 
+    private static JsonElement JsonObj(object obj)
+    {
+        var json = JsonSerializer.Serialize(obj);
+        return JsonSerializer.Deserialize<JsonElement>(json);
+    }
+
     [Fact]
-    public async Task RenderAsync_BueloDsl_WithTable_ReturnsValidXlsx()
+    public async Task RenderAsync_ArrayData_ReturnsValidXlsx()
     {
         var renderer = CreateRenderer();
-        var doc = BueloDslParser.Parse(TableSource);
         var input = new RendererInput
         {
-            Source = TableSource,
-            Mode = TemplateMode.BueloDsl,
-            BueloDslDocument = doc,
+            Source = "",
+            Mode = TemplateMode.FullClass,
             RawData = JsonArray(new { name = "Alice", salary = 5000.00 }, new { name = "Bob", salary = 6500.00 }),
             PageSettings = PageSettings.Default()
         };
@@ -63,45 +43,39 @@ public class ExcelRendererTests
         var bytes = await renderer.RenderAsync(input);
 
         Assert.NotEmpty(bytes);
-        // XLSX files start with PK (zip magic bytes)
-        Assert.Equal(0x50, bytes[0]); // 'P'
-        Assert.Equal(0x4B, bytes[1]); // 'K'
+        Assert.Equal(0x50, bytes[0]); // PK - zip header
+        Assert.Equal(0x4B, bytes[1]);
     }
 
     [Fact]
-    public async Task RenderAsync_ColumnHeaders_MatchColumnLabels()
+    public async Task RenderAsync_ObjectWithArrayProperty_CreatesWorksheet()
     {
         var renderer = CreateRenderer();
-        var doc = BueloDslParser.Parse(TitleAndTableSource);
         var input = new RendererInput
         {
-            Source = TitleAndTableSource,
-            Mode = TemplateMode.BueloDsl,
-            BueloDslDocument = doc,
-            RawData = JsonArray(new { name = "Alice", department = "HR" }),
+            Source = "",
+            Mode = TemplateMode.FullClass,
+            RawData = JsonObj(new { employees = new[] { new { name = "Alice", department = "HR" } } }),
             PageSettings = PageSettings.Default()
         };
 
-        // Just verify it runs without error; header content verified by XLSX structure
         var bytes = await renderer.RenderAsync(input);
+
         Assert.NotEmpty(bytes);
     }
 
     [Fact]
-    public async Task RenderAsync_CurrencyFormat_AppliesNumberFormat()
+    public async Task RenderAsync_FlatObject_CreatesKeyValueSheet()
     {
         var renderer = CreateRenderer();
-        var doc = BueloDslParser.Parse(TableSource);
         var input = new RendererInput
         {
-            Source = TableSource,
-            Mode = TemplateMode.BueloDsl,
-            BueloDslDocument = doc,
-            RawData = JsonArray(new { name = "Alice", salary = 5000.00 }),
+            Source = "",
+            Mode = TemplateMode.FullClass,
+            RawData = JsonObj(new { company = "Acme", year = 2024 }),
             PageSettings = PageSettings.Default()
         };
 
-        // Verify the XLSX is generated without exceptions (currency format applied internally)
         var bytes = await renderer.RenderAsync(input);
         Assert.NotEmpty(bytes);
     }
@@ -112,7 +86,7 @@ public class ExcelRendererTests
         var renderer = CreateRenderer();
         var input = new RendererInput
         {
-            Source = "page.Content().Text(\"hello\");",
+            Source = "",
             Mode = (TemplateMode)999,
             RawData = null,
             PageSettings = PageSettings.Default()

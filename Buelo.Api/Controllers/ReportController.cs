@@ -1,6 +1,5 @@
-using Buelo.Contracts;
+﻿using Buelo.Contracts;
 using Buelo.Engine;
-using Buelo.Engine.BueloDsl;
 using Buelo.Engine.Renderers;
 using Microsoft.AspNetCore.Mvc;
 
@@ -11,60 +10,42 @@ namespace Buelo.Api.Controllers;
 public class ReportController(TemplateEngine engine, ITemplateStore store, OutputRendererRegistry renderers) : ControllerBase
 {
     /// <summary>
-    /// Renders a report from a template supplied directly in the request body.
-    /// Use the optional <c>?format=pdf</c> (default) or <c>?format=excel</c> query parameter
-    /// to select the output format.
+    /// Renders a report from a C# IDocument template supplied in the request body.
+    /// Use ?format=pdf (default) or ?format=excel to select output format.
     /// </summary>
     [HttpPost("render")]
     public async Task<IActionResult> Render([FromBody] ReportRequest request, [FromQuery] string format = "pdf")
     {
-        if (!string.IsNullOrWhiteSpace(request.TemplatePath))
-        {
-            return await RenderWorkspaceFile(request, format);
-        }
-
         var renderer = renderers.TryGetRenderer(format);
         if (renderer is null)
             return BadRequest(new { error = $"Unsupported format '{format}'." });
 
-        var effectiveMode = request.Mode;
-
-        if (!renderer.SupportsMode(effectiveMode))
-            return BadRequest(new { error = $"Format '{format}' does not support template mode '{effectiveMode}'." });
-
-        BueloDslDocument? ast = effectiveMode == TemplateMode.BueloDsl
-            ? BueloDslParser.Parse(request.Template) : null;
+        if (!renderer.SupportsMode(request.Mode))
+            return BadRequest(new { error = $"Format '{format}' does not support mode '{request.Mode}'." });
 
         var input = new RendererInput
         {
             Source = request.Template,
-            Mode = effectiveMode,
+            Mode = request.Mode,
             RawData = request.Data,
             PageSettings = request.PageSettings ?? PageSettings.Default(),
-            BueloDslDocument = ast,
-            FormatHints = ast?.Directives.FormatHints != null
-                ? new Dictionary<string, string>(ast.Directives.FormatHints)
-                : new Dictionary<string, string>()
         };
 
-        var bytes = await renderer.RenderAsync(input);
-        var baseName = Path.GetFileNameWithoutExtension(request.FileName);
-        return File(bytes, renderer.ContentType, baseName + renderer.FileExtension);
+        try
+        {
+            var bytes = await renderer.RenderAsync(input);
+            var baseName = Path.GetFileNameWithoutExtension(request.FileName);
+            return File(bytes, renderer.ContentType, baseName + renderer.FileExtension);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     /// <summary>
-    /// Renders a report from a workspace-relative <c>.buelo</c> path.
-    /// Uses optional <c>dataSourcePath</c> override, then <c>@project dataSourcePath</c>, then <c>@data from</c>.
-    /// </summary>
-    [HttpPost("render/file")]
-    public Task<IActionResult> RenderFile([FromBody] ReportRequest request, [FromQuery] string format = "pdf")
-    {
-        return RenderWorkspaceFile(request, format);
-    }
-
-    /// <summary>
-    /// Validates a template by compiling it without generating a PDF.
-    /// Always returns <c>200 OK</c>; the <c>valid</c> field signals success or failure.
+    /// Validates a C# template by compiling it with Roslyn without generating output.
+    /// Always returns 200 OK; the valid field signals success or failure.
     /// </summary>
     [HttpPost("validate")]
     public async Task<IActionResult> Validate([FromBody] ReportValidateRequest request)
@@ -74,14 +55,16 @@ public class ReportController(TemplateEngine engine, ITemplateStore store, Outpu
     }
 
     /// <summary>
-    /// Renders a previously saved template by its GUID.
-    /// The request body is optional: omit it to fall back to the template's mock data and settings.
-    /// Supply <c>?version=N</c> to render from a historical snapshot instead of the current template.
-    /// Supply <c>?format=pdf</c> or <c>?format=excel</c> to choose the output format.
-    /// When omitted, output format defaults to the template's configured <see cref="TemplateRecord.OutputFormat"/>.
+    /// Renders a stored template by its GUID.
+    /// Supply ?format=pdf|excel to override the template's default output format.
+    /// Supply ?version=N to render from a historical snapshot.
     /// </summary>
     [HttpPost("render/{id:guid}")]
-    public async Task<IActionResult> RenderById(Guid id, [FromQuery] int? version = null, [FromBody] TemplateRenderRequest? request = null, [FromQuery] string? format = null)
+    public async Task<IActionResult> RenderById(
+        Guid id,
+        [FromQuery] int? version = null,
+        [FromBody] TemplateRenderRequest? request = null,
+        [FromQuery] string? format = null)
     {
         TemplateRecord? template;
 
@@ -123,6 +106,9 @@ public class ReportController(TemplateEngine engine, ITemplateStore store, Outpu
         if (renderer is null)
             return BadRequest(new { error = $"Unsupported format '{effectiveFormat}'." });
 
+        if (!renderer.SupportsMode(template.Mode))
+            return BadRequest(new { error = $"Format '{effectiveFormat}' does not support mode '{template.Mode}'." });
+
         var data = request?.Data ?? template.MockData;
         if (data is null)
             return BadRequest(new { error = "No data provided and the template has no mock data configured." });
@@ -130,40 +116,27 @@ public class ReportController(TemplateEngine engine, ITemplateStore store, Outpu
         var fileName = request?.FileName ?? template.DefaultFileName;
         var pageSettings = request?.PageSettings ?? template.PageSettings;
 
-        var effectiveMode = template.Mode;
-
-        if (!renderer.SupportsMode(effectiveMode))
-            return BadRequest(new { error = $"Format '{effectiveFormat}' does not support template mode '{effectiveMode}'." });
-
-        if (string.Equals(renderer.Format, "pdf", StringComparison.OrdinalIgnoreCase))
+        try
         {
-            var pdf = await engine.RenderTemplateAsync(template, data, pageSettings);
-            return File(pdf, renderer.ContentType, Path.GetFileNameWithoutExtension(fileName) + renderer.FileExtension);
+            var input = new RendererInput
+            {
+                Source = template.Template,
+                Mode = template.Mode,
+                RawData = data,
+                PageSettings = pageSettings ?? PageSettings.Default(),
+            };
+
+            var bytes = await renderer.RenderAsync(input);
+            return File(bytes, renderer.ContentType, Path.GetFileNameWithoutExtension(fileName) + renderer.FileExtension);
         }
-
-        BueloDslDocument? ast = effectiveMode == TemplateMode.BueloDsl
-            ? BueloDslParser.Parse(template.Template)
-            : null;
-
-        var input = new RendererInput
+        catch (InvalidOperationException ex)
         {
-            Source = template.Template,
-            Mode = effectiveMode,
-            RawData = data,
-            PageSettings = pageSettings ?? PageSettings.Default(),
-            BueloDslDocument = ast,
-            FormatHints = ast?.Directives.FormatHints != null
-                ? new Dictionary<string, string>(ast.Directives.FormatHints)
-                : new Dictionary<string, string>()
-        };
-
-        var bytes = await renderer.RenderAsync(input);
-        return File(bytes, renderer.ContentType, Path.GetFileNameWithoutExtension(fileName) + renderer.FileExtension);
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     /// <summary>
-    /// Renders a previously saved template using its built-in mock data.
-    /// Useful for quickly previewing the template without supplying real data.
+    /// Renders a stored template using its built-in mock data.
     /// </summary>
     [HttpPost("preview/{id:guid}")]
     public async Task<IActionResult> Preview(Guid id)
@@ -173,10 +146,17 @@ public class ReportController(TemplateEngine engine, ITemplateStore store, Outpu
             return NotFound(new { error = $"Template '{id}' not found." });
 
         if (template.MockData is null)
-            return BadRequest(new { error = "Template has no mock data configured. Add MockData to the template to enable preview." });
+            return BadRequest(new { error = "Template has no mock data configured." });
 
-        var pdf = await engine.RenderTemplateAsync(template, template.MockData, template.PageSettings);
-        return File(pdf, "application/pdf", template.DefaultFileName);
+        try
+        {
+            var pdf = await engine.RenderTemplateAsync(template, template.MockData, template.PageSettings);
+            return File(pdf, "application/pdf", template.DefaultFileName);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     /// <summary>
@@ -193,43 +173,4 @@ public class ReportController(TemplateEngine engine, ITemplateStore store, Outpu
             });
         return Ok(formats);
     }
-
-    private async Task<IActionResult> RenderWorkspaceFile(ReportRequest request, string format)
-    {
-        if (string.IsNullOrWhiteSpace(request.TemplatePath))
-            return BadRequest(new { error = "templatePath is required for workspace file rendering." });
-
-        var renderer = renderers.TryGetRenderer(format);
-        if (renderer is null)
-            return BadRequest(new { error = $"Unsupported format '{format}'." });
-
-        if (!renderer.SupportsMode(TemplateMode.BueloDsl))
-            return BadRequest(new { error = $"Format '{format}' does not support template mode 'BueloDsl'." });
-
-        try
-        {
-            var pageSettings = request.PageSettings ?? PageSettings.Default();
-            var bytes = await engine.RenderWorkspaceFileAsync(
-                request.TemplatePath,
-                request.Data,
-                request.DataSourcePath,
-                pageSettings);
-
-            var baseName = Path.GetFileNameWithoutExtension(request.FileName);
-            var outputName = string.IsNullOrWhiteSpace(baseName)
-                ? "report"
-                : baseName;
-            return File(bytes, renderer.ContentType, outputName + renderer.FileExtension);
-        }
-        catch (FileNotFoundException ex)
-        {
-            return NotFound(new { error = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
-    }
 }
-
-
