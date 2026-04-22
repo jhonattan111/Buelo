@@ -2,11 +2,16 @@ using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
 
-public class MyReport : IDocument
+public class Colaborador 
+{
+    public string Name {get; set;}
+}
+
+public class Relatorio_40001 : IDocument
 {
     private readonly dynamic _data;
 
-    public MyReport(dynamic data) => _data = data;
+    public Relatorio_40001(dynamic data) => _data = data;
 
     public DocumentMetadata GetMetadata() => DocumentMetadata.Default;
 
@@ -20,6 +25,7 @@ public class MyReport : IDocument
             page.Content().Column(col =>
             {
                 col.Item().Text($"Hello {_data.name}");
+                col.Item().Text("Teste");
             });
             page.Footer().AlignCenter().Text(x =>
             {

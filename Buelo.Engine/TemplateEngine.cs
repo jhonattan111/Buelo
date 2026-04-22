@@ -145,12 +145,15 @@ public class TemplateEngine
 
     private static IEnumerable<MetadataReference> GetMetadataReferences()
     {
-        // Ensure Microsoft.CSharp is loaded — required for dynamic dispatch
-        // (CSharpArgumentInfo.Create). It may not be loaded in AppDomain yet.
-        _ = typeof(Microsoft.CSharp.RuntimeBinder.Binder);
+        // Explicitly resolve Microsoft.CSharp — the Roslyn binder requires it for
+        // 'dynamic' dispatch (CSharpArgumentInfo.Create). Relying on AppDomain alone
+        // is unreliable because the assembly may not yet be registered there.
+        var msCSharp = typeof(Microsoft.CSharp.RuntimeBinder.Binder).Assembly;
 
         return AppDomain.CurrentDomain.GetAssemblies()
+            .Append(msCSharp)
             .Where(a => !a.IsDynamic && !string.IsNullOrWhiteSpace(a.Location))
+            .DistinctBy(a => a.Location, StringComparer.OrdinalIgnoreCase)
             .Select(a => MetadataReference.CreateFromFile(a.Location));
     }
 

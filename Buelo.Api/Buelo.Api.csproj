@@ -10,6 +10,14 @@
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.5" />
   </ItemGroup>
 
+  <!-- Exclude the templates storage folder from compilation and hot-reload watch.
+       Template source code is stored as string content inside template.record.json
+       and compiled at runtime by Roslyn — it must NOT be picked up by MSBuild. -->
+  <ItemGroup>
+    <Compile Remove="templates\**\*.cs" />
+    <Watch Remove="templates\**" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Buelo.Engine\Buelo.Engine.csproj" />
   </ItemGroup>

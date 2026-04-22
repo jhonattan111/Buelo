@@ -7,24 +7,29 @@ namespace Buelo.Engine;
 /// <summary>
 /// File-system backed implementation of <see cref="ITemplateStore"/>.
 /// <para>
-/// Each template lives in its own sub-directory under <paramref name="root"/>:
+/// Each template is stored as a single self-contained JSON file:
 /// <code>
 /// {root}/{id}/
-///   template.record.json          — metadata (no Template source, no Artefacts)
-///   template.report.cs            — template source code
-///   {name}{ext}                   — each artefact (e.g. mockdata.json, helper-tax.cs)
+///   template.record.json   — full record: id, name, template source, artefacts (all embedded)
 ///   versions/
-///     1.snapshot.json             — version snapshot (Template + Artefacts)
+///     1.snapshot.json      — version snapshot
 ///     2.snapshot.json
 ///     ...
 /// </code>
+/// </para>
+/// <para>
+/// Storing everything inside the record JSON means no loose <c>.cs</c> files on disk
+/// (avoiding MSBuild/dotnet-watch picking them up), and migrating to a database only
+/// requires reading the JSON and inserting one row per template.
 /// </para>
 /// <para>Opt into this store via <c>builder.Services.AddBueloFileSystemStore()</c>.</para>
 /// </summary>
 public class FileSystemTemplateStore : ITemplateStore
 {
-    private const string MetaFile = "template.record.json";
-    private const string SourceFile = "template.report.cs";
+    private const string RecordFile = "template.record.json";
+
+    // Legacy file names kept only for backward-compat reads during migration.
+    private const string LegacySourceFile = "template.report.cs";
     private const string VersionsDir = "versions";
 
     private static readonly JsonSerializerOptions JsonOpts = new()
@@ -91,55 +96,10 @@ public class FileSystemTemplateStore : ITemplateStore
         var dir = TemplateDir(template.Id);
         Directory.CreateDirectory(dir);
 
-        // Write metadata (excluding Template source and Artefacts).
-        var meta = ToMeta(template);
-        var metaJson = JsonSerializer.Serialize(meta, JsonOpts);
-        await File.WriteAllTextAsync(Path.Combine(dir, MetaFile), metaJson);
-
-        // Write template source.
-        await File.WriteAllTextAsync(Path.Combine(dir, SourceFile), template.Template ?? string.Empty);
-
-        // Delete artefact files that are no longer present.
-        var keepFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            MetaFile,
-            SourceFile
-        };
-        foreach (var a in template.Artefacts)
-            keepFiles.Add(GetArtefactRelativePath(a));
-
-        foreach (var file in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
-        {
-            var rel = NormalizeRelativePath(Path.GetRelativePath(dir, file));
-            if (rel.StartsWith($"{VersionsDir}/", StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            if (!keepFiles.Contains(rel))
-                File.Delete(file);
-        }
-
-        foreach (var subDir in Directory
-            .EnumerateDirectories(dir, "*", SearchOption.AllDirectories)
-            .OrderByDescending(d => d.Length))
-        {
-            if (string.Equals(Path.GetFileName(subDir), VersionsDir, StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            if (!Directory.EnumerateFileSystemEntries(subDir).Any())
-                Directory.Delete(subDir);
-        }
-
-        // Write each artefact.
-        foreach (var a in template.Artefacts)
-        {
-            var rel = GetArtefactRelativePath(a);
-            var fullPath = Path.Combine(dir, rel.Replace('/', Path.DirectorySeparatorChar));
-            var parent = Path.GetDirectoryName(fullPath);
-            if (!string.IsNullOrEmpty(parent))
-                Directory.CreateDirectory(parent);
-
-            await File.WriteAllTextAsync(fullPath, a.Content);
-        }
+        // Write the full record (metadata + template source + artefacts) as a single JSON file.
+        // No separate .cs or artefact files are created — everything lives in this one record.
+        var json = JsonSerializer.Serialize(template, JsonOpts);
+        await File.WriteAllTextAsync(Path.Combine(dir, RecordFile), json);
 
         return template;
     }
@@ -190,14 +150,6 @@ public class FileSystemTemplateStore : ITemplateStore
     private string VersionsDirPath(Guid id) => Path.Combine(TemplateDir(id), VersionsDir);
     private string VersionFilePath(Guid id, int version) => Path.Combine(VersionsDirPath(id), $"{version}.snapshot.json");
 
-    private static string GetArtefactRelativePath(TemplateArtefact artefact)
-    {
-        if (!string.IsNullOrWhiteSpace(artefact.Path))
-            return NormalizeRelativePath(artefact.Path);
-
-        return NormalizeRelativePath($"{artefact.Name}{artefact.Extension}");
-    }
-
     private static string NormalizeRelativePath(string path)
     {
         var normalized = path.Replace('\\', '/').Trim();
@@ -241,75 +193,53 @@ public class FileSystemTemplateStore : ITemplateStore
 
     private static async Task<TemplateRecord?> ReadRecordAsync(string dir)
     {
-        var metaPath = Path.Combine(dir, MetaFile);
-        if (!File.Exists(metaPath))
+        var recordPath = Path.Combine(dir, RecordFile);
+        if (!File.Exists(recordPath))
             return null;
 
-        var metaJson = await File.ReadAllTextAsync(metaPath);
-        var meta = JsonSerializer.Deserialize<TemplateMeta>(metaJson, JsonOpts);
-        if (meta is null)
+        var json = await File.ReadAllTextAsync(recordPath);
+
+        // Try to deserialize as the full self-contained TemplateRecord (new format).
+        // Fall back gracefully to the legacy split-file layout for backward compat.
+        var record = JsonSerializer.Deserialize<TemplateRecord>(json, JsonOpts);
+        if (record is null)
             return null;
 
-        var record = FromMeta(meta);
-
-        // Read template source.
-        var srcPath = Path.Combine(dir, SourceFile);
-        record.Template = File.Exists(srcPath) ? await File.ReadAllTextAsync(srcPath) : string.Empty;
-
-        // Read artefacts (every file except reserved ones; skip the versions sub-directory).
-        foreach (var file in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
+        // Backward-compat: template source was stored in a separate .cs file in the old format.
+        if (string.IsNullOrEmpty(record.Template))
         {
-            var rel = NormalizeRelativePath(Path.GetRelativePath(dir, file));
-            if (rel.StartsWith($"{VersionsDir}/", StringComparison.OrdinalIgnoreCase))
-                continue;
+            var srcPath = Path.Combine(dir, LegacySourceFile);
+            if (File.Exists(srcPath))
+                record.Template = await File.ReadAllTextAsync(srcPath);
+        }
 
-            if (string.Equals(rel, MetaFile, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(rel, SourceFile, StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            var fileName = Path.GetFileName(rel);
-            var dotIndex = fileName.IndexOf('.');
-            var name = dotIndex >= 0 ? fileName[..dotIndex] : fileName;
-            var ext = dotIndex >= 0 ? fileName[dotIndex..] : string.Empty;
-            var content = await File.ReadAllTextAsync(file);
-            record.Artefacts.Add(new TemplateArtefact
+        // Backward-compat: artefacts were separate files on disk in the old format.
+        if (record.Artefacts.Count == 0)
+        {
+            foreach (var file in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
             {
-                Path = rel,
-                Name = name,
-                Extension = ext,
-                Content = content
-            });
+                var rel = NormalizeRelativePath(Path.GetRelativePath(dir, file));
+                if (rel.StartsWith($"{VersionsDir}/", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (string.Equals(rel, RecordFile, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(rel, LegacySourceFile, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var fileName = Path.GetFileName(rel);
+                var dotIndex = fileName.IndexOf('.');
+                var name = dotIndex >= 0 ? fileName[..dotIndex] : fileName;
+                var ext = dotIndex >= 0 ? fileName[dotIndex..] : string.Empty;
+                var content = await File.ReadAllTextAsync(file);
+                record.Artefacts.Add(new TemplateArtefact
+                {
+                    Path = rel,
+                    Name = name,
+                    Extension = ext,
+                    Content = content
+                });
+            }
         }
 
         return record;
     }
-
-    private static TemplateMeta ToMeta(TemplateRecord r) => new(
-        r.Id, r.Name, r.Description, r.Mode,
-        r.DataSchema, r.MockData, r.DefaultFileName,
-        r.OutputFormat,
-        r.PageSettings, r.CreatedAt, r.UpdatedAt);
-
-    private static TemplateRecord FromMeta(TemplateMeta m) => new()
-    {
-        Id = m.Id,
-        Name = m.Name,
-        Description = m.Description,
-        Mode = m.Mode,
-        DataSchema = m.DataSchema,
-        MockData = m.MockData,
-        DefaultFileName = m.DefaultFileName,
-        OutputFormat = m.OutputFormat,
-        PageSettings = m.PageSettings ?? PageSettings.Default(),
-        CreatedAt = m.CreatedAt,
-        UpdatedAt = m.UpdatedAt
-    };
-
-    // ── Internal DTO ─────────────────────────────────────────────────────────
-
-    private record TemplateMeta(
-        Guid Id, string Name, string? Description, TemplateMode Mode,
-        string? DataSchema, object? MockData, string DefaultFileName,
-        OutputFormat OutputFormat,
-        PageSettings? PageSettings, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt);
 }
