@@ -1,0 +1,6 @@
+[submodule "BueloApi"]
+	path = BueloApi
+	url = git@github.com:jhonattan111/BueloApi.git
+[submodule "BueloWeb"]
+	path = BueloWeb
+	url = git@github.com:jhonattan111/BueloWeb.git

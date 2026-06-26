@@ -1,0 +1,6 @@
+# Claude Code — settings pessoais (não versionar)
+.claude/settings.local.json
+
+# OS
+Thumbs.db
+.DS_Store
