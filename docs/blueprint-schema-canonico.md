@@ -316,7 +316,13 @@ Cada `kind` ganha um **JSON Schema**. No front, `monaco-yaml` + esse schema dão
 
 ## 12. Decisões em aberto (precisam de você)
 
-1. **Serialização canônica:** o modelo é definido por JSON Schema; **YAML e JSON** ambos aceitos na entrada (YAML p/ humano, JSON p/ API). Confirmar.
+> **Status 2026-06-28:** quase tudo aqui foi **decidido e implementado**. (1) YAML only ✅ · (2) markdown
+> lidera ✅ (bloco `markdown`; `html`-subset não feito) · (3) stdlib v1 entregue ✅ · (4) pin **opcional**
+> (advisory — `StripPin` remove `@versão`, não valida) · (5) escopo de componente = params + ambiente
+> mínimo ✅ · (6) chart = v2 (fora). Restam só pontas: `validate:` em coluna durante render, recipe Excel
+> do IR, e o `html`-subset — ver handoff.
+
+1. **Serialização canônica:** ✅ **decidido (2026-06-28) — YAML only** para as definições (autoria). Os **dados** que alimentam o report continuam **JSON** (vêm da API). Um parser só na fatia vertical: YamlDotNet. JSON-de-definição pode entrar depois se a API precisar, mas não é v1.
 2. **Conteúdo rico:** `markdown` lidera, `html`-subset secundário. Confirmar.
 3. **Riqueza da stdlib v1:** quais funções entram já (sugestão: agregação + formatos BR + string básica). Definir a lista de corte.
 4. **Pin de versão:** default última vs pin obrigatório em produção. Recomendo pin opcional.
@@ -325,31 +331,40 @@ Cada `kind` ganha um **JSON Schema**. No front, `monaco-yaml` + esse schema dão
 
 ---
 
-## 13. Persistência (decidido 2026-06-26)
+## 13. Persistência (decidido 2026-06-26, fork resolvido 2026-06-28)
 
-**Abstração plugável via EF Core** — provider escolhido por config, mesmo modelo de entidades para todos os tiers:
+**Decisão: tudo plugável, mas por DOIS EIXOS diferentes** — porque definições e dados operacionais têm paradigmas distintos.
 
-| Tier | Provider | Uso |
-|---|---|---|
-| Dev | SQLite (`:memory:` ou arquivo) | ambiente agnóstico, zero infra; EF-InMemory só p/ testes unitários |
-| Self-host leve | SQLite (arquivo) | dev solo / pequeno; backup = copiar o arquivo |
-| Prod | **PostgreSQL** (default de prod) | concorrência de escrita (logs sob carga) + múltiplas instâncias com banco compartilhado |
+| Domínio | Abstração | Default dev | Default prod | Outros providers |
+|---|---|---|---|---|
+| **Definições** | `ITemplateStore` (custom, **já existe** no código) | **fs (git)** | fs (git) *ou* Postgres | InMemory (testes), SQLite |
+| **Operacional** | **EF Core `DbContext`** (provider por config) | **SQLite** | **PostgreSQL** | InMemory (testes) |
 
-> O ganho do Postgres aqui é concorrência de escrita e escala horizontal multi-nó — **não** volume de dados (SQLite aguenta muito numa instância única).
+> **Por que eixos diferentes?** Definições têm um backend (fs/git) que **não é banco** — ele dá diff/PR/review de graça, coisa que DB nenhum entrega. Por isso precisam de uma interface própria (`ITemplateStore`, que já existe com impls InMemory + FileSystem). Operacional é tudo relacional ⇒ **o próprio EF Core já é a abstração**: troca `UseSqlite()`↔`UseNpgsql()` por config, **um único modelo de entidades**, sem interface extra.
 
-### Dois domínios de armazenamento (perfis distintos)
+### Definições — `ITemplateStore` plugável (fork resolvido)
+
+Provider escolhido por config. **Default fs-store** (arquivos `.yml` em disco): versionamento por git de graça, legível, modelo jsreport, reaproveita `FileSystemWorkspaceStore`/`FileSystemTemplateStore` que **já existem**. Providers SQLite/Postgres (definição como blob jsonb/text + metadados) ficam disponíveis pela mesma interface para quem preferir store único. Nenhuma decisão irreversível: a abstração já está no código.
+
+### Operacional — EF Core, provider por config
+
+**SQLite default no dev** (arquivo ou `:memory:`, **zero infra** — sobe a API sem container), **PostgreSQL default em prod** (concorrência de escrita sob carga + multi-nó com banco compartilhado). Mesmo modelo de entidades nos dois.
+
+- O ganho do Postgres é concorrência de escrita e escala horizontal — **não** volume (SQLite aguenta muito numa instância única).
+- **Schema provider-agnóstico:** colunas normais; campo JSON (ex.: `parameters`) guardado como texto/jsonb via value-converter que funciona nos dois providers.
+- **Ressalva — migrations são por-provider:** mantém-se um set de migrations p/ SQLite e outro p/ Postgres (ou `EnsureCreated` no dev SQLite). Custo pequeno e conhecido.
+
+### Perfis dos dois domínios
 
 - **Definições** (`report`, `component`, `styles`, `formats`, `lib`, `validator`, `theme`): documento, versionado, read-heavy, poucos registros.
-- **Dados operacionais** (logs de emissão, login/auditoria, histórico de render, parâmetros): append-heavy, consultado/agregado → **PostgreSQL** (decisão firme).
-
-### Fork em aberto — onde guardar as DEFINIÇÕES
-
-- **(recomendado) fs-store** — arquivos em disco, **versionamento por git de graça** (diff/PR/review), legível, modelo jsreport, reaproveita o `FileSystemWorkspaceStore` existente. Contras: precisa de volume persistente no container; backup inclui o FS.
-- **Postgres (jsonb)** — store único pra operar/backup, transacional, fácil de consultar relações entre definições. Contras: definições não são git-diffáveis sem tooling; versionamento é manual.
+- **Dados operacionais** (logs de emissão, login/auditoria, histórico de render, parâmetros): append-heavy, consultado/agregado.
 
 ### Config de instância ≠ definição
 
 Connection string do banco, API keys e settings de auth vivem em **env/secrets** (ovo-e-galinha: não podem morar no banco que inicializam). "Arquivo de configuração de report" (theme/page/parâmetros) **é** uma definição e segue a regra acima.
 
 ### Sequência de implementação
-1. `DbContext` EF + modelo de entidades (§2) → 2. SQLite funcionando (mais rápido pra destravar) → 3. provider Postgres + tabelas operacionais (logs/auth/audit) → 4. (se fs-store) manter definições em arquivo, Postgres só p/ operacional.
+**Definições não bloqueiam a fatia vertical** — a abstração (`ITemplateStore` / `FileSystemWorkspaceStore`) já existe. A persistência operacional (EF Core) é hardening e entra depois.
+
+1. **Fatia vertical declarativa primeiro** (não depende de DbContext): YAML → interpretador → `BueloDocument` → recipe QuestPDF → PDF, lendo a definição do fs-store que já existe.
+2. **Operacional depois (hardening):** `DbContext` EF + entidades operacionais → SQLite default (dev, zero infra) → provider Postgres (prod) → tabelas de logs/auth/audit/render-history.
