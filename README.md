@@ -1,32 +1,32 @@
 # Buelo
 
-Plataforma de **criação de relatórios**. O usuário escreve um template em **C#** (uma classe QuestPDF `IDocument`), fornece dados em JSON, e a plataforma compila o template em runtime e gera um **PDF** (ou **Excel**).
+A **report creation** platform. The user writes a template in **C#** (a QuestPDF `IDocument` class), provides data in JSON, and the platform compiles the template at runtime and generates a **PDF** (or **Excel**).
 
-Este é o repositório **guarda-chuva**: agrega os dois componentes como **git submodules**.
+This is the **umbrella** repository: it aggregates the two components as **git submodules**.
 
-| Componente | Descrição | Stack |
+| Component | Description | Stack |
 |---|---|---|
-| **[BueloApi](BueloApi)** | API de compilação + render | ASP.NET Core 10, Roslyn, QuestPDF, ClosedXML |
-| **[BueloWeb](BueloWeb)** | Editor web (workspace VS Code-like) | Vue 3, Vite, Monaco, Pinia, Tailwind |
+| **[BueloApi](BueloApi)** | Compilation + render API | ASP.NET Core 10, Roslyn, QuestPDF, ClosedXML |
+| **[BueloWeb](BueloWeb)** | Web editor (VS Code-like workspace) | Vue 3, Vite, Monaco, Pinia, Tailwind |
 
-## Começando
+## Getting started
 
 ```bash
-# clonar com os submodules
+# clone with the submodules
 git clone --recurse-submodules git@github.com:jhonattan111/Buelo.git
 cd Buelo
 
-# (se já clonou sem submodules)
+# (if you already cloned without submodules)
 git submodule update --init --recursive
 ```
 
-### Rodar em desenvolvimento
+### Run in development
 
 ```powershell
 ./dev.ps1
 ```
 
-Ou em dois terminais:
+Or in two terminals:
 
 ```bash
 # Terminal 1 — API (http://localhost:5238)
@@ -38,22 +38,22 @@ pnpm install
 pnpm dev
 ```
 
-O front lê a URL da API de `BueloWeb/.env` (`VITE_API_BASE_URL=http://localhost:5238`).
+The frontend reads the API URL from `BueloWeb/.env` (`VITE_API_BASE_URL=http://localhost:5238`).
 
-## Estrutura
+## Structure
 
 ```
-Buelo/                  ← este repo (docs + ponteiros de submodule)
+Buelo/                  ← this repo (docs + submodule pointers)
 ├── BueloApi/           ← submodule → github.com/jhonattan111/BueloApi
 ├── BueloWeb/           ← submodule → github.com/jhonattan111/BueloWeb
-├── CLAUDE.md           ← guia para agentes de IA
-├── dev.ps1            ← sobe API + Web juntos
+├── CLAUDE.md           ← guide for AI agents
+├── dev.ps1            ← starts API + Web together
 └── README.md
 ```
 
-## Trabalhando nos submodules
+## Working in the submodules
 
-Cada submodule é um repositório git **independente**, com seu próprio histórico e branch. Faça commits **dentro** de cada um. Depois, registre o novo ponteiro aqui:
+Each submodule is an **independent** git repository, with its own history and branch. Make commits **inside** each one. Then register the new pointer here:
 
 ```bash
 git add BueloApi BueloWeb

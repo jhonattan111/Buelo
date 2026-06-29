@@ -1,67 +1,67 @@
-# CLAUDE.md — Buelo (guarda-chuva)
+# CLAUDE.md — Buelo (umbrella)
 
-Repositório **satélite** do produto **Buelo**: uma plataforma de **criação de relatórios**. Agrega os dois repos que rodam de forma complementar, como **git submodules**.
+**Satellite** repository of the **Buelo** product: a **report creation** platform. Aggregates the two repos that run complementarily, as **git submodules**.
 
-## Os dois repositórios
+## The two repositories
 
-| Submodule | Papel | Stack | Porta | Guia |
+| Submodule | Role | Stack | Port | Guide |
 |---|---|---|---|---|
-| [`BueloApi`](BueloApi) | API que compila templates C# e gera PDF/Excel | ASP.NET Core 10 + Roslyn + QuestPDF | `5238` | [BueloApi/CLAUDE.md](BueloApi/CLAUDE.md) |
-| [`BueloWeb`](BueloWeb) | Editor web (workspace estilo VS Code) | Vue 3 + Vite + Monaco + Pinia | `5173` | [BueloWeb/CLAUDE.md](BueloWeb/CLAUDE.md) |
+| [`BueloApi`](BueloApi) | API that compiles C# templates and generates PDF/Excel | ASP.NET Core 10 + Roslyn + QuestPDF | `5238` | [BueloApi/CLAUDE.md](BueloApi/CLAUDE.md) |
+| [`BueloWeb`](BueloWeb) | Web editor (VS Code-style workspace) | Vue 3 + Vite + Monaco + Pinia | `5173` | [BueloWeb/CLAUDE.md](BueloWeb/CLAUDE.md) |
 
-**O front (`BueloWeb`) consome a API (`BueloApi`) em `http://localhost:5238`.** A API libera CORS só para `http://localhost:5173`.
+**The frontend (`BueloWeb`) consumes the API (`BueloApi`) at `http://localhost:5238`.** The API only allows CORS for `http://localhost:5173`.
 
-## Conceito do produto
+## Product concept
 
-O usuário escreve um **template C#** (uma classe que implementa `QuestPDF.Infrastructure.IDocument`) no editor Monaco, fornece dados (JSON), e a API compila esse código em runtime com Roslyn e devolve um **PDF** (ou **Excel**). Não há DSL própria — é C# puro + QuestPDF.
+The user writes a **C# template** (a class implementing `QuestPDF.Infrastructure.IDocument`) in the Monaco editor, provides data (JSON), and the API compiles that code at runtime with Roslyn and returns a **PDF** (or **Excel**). There is no custom DSL — it's pure C# + QuestPDF.
 
-## Como navegar (para agentes)
+## How to navigate (for agents)
 
-- **Trabalho no backend** → entre em `BueloApi/` e siga [`BueloApi/CLAUDE.md`](BueloApi/CLAUDE.md).
-- **Trabalho no frontend** → entre em `BueloWeb/` e siga [`BueloWeb/CLAUDE.md`](BueloWeb/CLAUDE.md).
-- Cada submodule é um repo git independente com seu próprio histórico, branch e remote. Commits e PRs acontecem **dentro** do submodule, não aqui.
-- Este repo guarda-chuva versiona apenas: docs (`CLAUDE.md`, `README.md`), `dev.ps1` e os **ponteiros** de commit dos submodules (`.gitmodules`).
+- **Backend work** → go into `BueloApi/` and follow [`BueloApi/CLAUDE.md`](BueloApi/CLAUDE.md).
+- **Frontend work** → go into `BueloWeb/` and follow [`BueloWeb/CLAUDE.md`](BueloWeb/CLAUDE.md).
+- Each submodule is an independent git repo with its own history, branch, and remote. Commits and PRs happen **inside** the submodule, not here.
+- This umbrella repo versions only: docs (`CLAUDE.md`, `README.md`), `dev.ps1`, and the commit **pointers** of the submodules (`.gitmodules`).
 
 ## Submodules — comandos essenciais
 
 ```bash
-# clonar tudo de uma vez
-git clone --recurse-submodules <url-deste-repo>
+# clone everything at once
+git clone --recurse-submodules <url-of-this-repo>
 
-# se já clonou sem submodules
+# if you already cloned without submodules
 git submodule update --init --recursive
 
-# atualizar os submodules para o último commit dos seus branches
+# update the submodules to the latest commit of their branches
 git submodule update --remote --merge
 
-# após avançar um submodule, registre o novo ponteiro aqui
+# after advancing a submodule, register the new pointer here
 git add BueloApi BueloWeb && git commit -m "chore: bump submodules"
 ```
 
-## Política de commit & push
+## Commit & push policy
 
-**Sempre que os checks/testes do repo passarem (verde), faça commit das mudanças e dê push** — não acumule trabalho local. Se algum teste/check falhar, **não** commite nem pushe: conserte primeiro.
+**Whenever the repo's checks/tests pass (green), commit the changes and push** — don't accumulate local work. If any test/check fails, do **not** commit or push: fix it first.
 
-Fluxo com submodules (commits/PRs acontecem **dentro** do submodule):
-1. No submodule alterado, rode os checks (`BueloApi`: `dotnet build` + `dotnet test`; `BueloWeb`: `pnpm typecheck` + `pnpm build`). Verdes → `git commit` + `git push`.
-2. No guarda-chuva, `git add <submodule>` (bump do ponteiro) + `git commit` + `git push`.
+Submodule flow (commits/PRs happen **inside** the submodule):
+1. In the changed submodule, run the checks (`BueloApi`: `dotnet build` + `dotnet test`; `BueloWeb`: `pnpm typecheck` + `pnpm build`). Green → `git commit` + `git push`.
+2. In the umbrella, `git add <submodule>` (bump the pointer) + `git commit` + `git push`.
 
-Commits vão direto no `master` de cada repo (convenção atual deste projeto).
+Commits go straight to each repo's `master` (this project's current convention).
 
-## Rodar os dois juntos (dev)
+## Run both together (dev)
 
 ```powershell
-./dev.ps1          # sobe API (5238) + Web (5173) em janelas separadas
+./dev.ps1          # starts API (5238) + Web (5173) in separate windows
 ```
 
-Ou manualmente, em dois terminais:
+Or manually, in two terminals:
 
 ```bash
 dotnet run --project BueloApi/Buelo.Api     # terminal 1 → http://localhost:5238
 cd BueloWeb && pnpm install && pnpm dev      # terminal 2 → http://localhost:5173
 ```
 
-## Convenções de IA neste produto
+## AI conventions in this product
 
-- Cada repo tem seu `CLAUDE.md` como fonte de verdade; `docs/` em cada um guarda histórico de sprints (referência, não estado atual).
-- A config de IA foi migrada de Copilot (`ai/*.instructions.md` com `applyTo`) para o padrão Claude Code (`CLAUDE.md` + `.claude/`).
+- Each repo has its own `CLAUDE.md` as the source of truth; `docs/` in each one keeps a history of sprints (reference, not current state).
+- The AI config was migrated from Copilot (`ai/*.instructions.md` with `applyTo`) to the Claude Code standard (`CLAUDE.md` + `.claude/`).
