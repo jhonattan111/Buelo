@@ -19,10 +19,10 @@ This blueprint specifies the **declarative engine** and the **IR** it emits.
 ### Pipeline
 
 ```
-arquivos .yml (report + imports)
-  → parse + resolução de imports/símbolos
-  → avaliação de expressões e diretivas (forEach/if/groupBy) contra os dados
-  → BueloDocument (IR tipado, sem expressões pendentes)
+.yml files (report + imports)
+  → parse + resolve imports/symbols
+  → evaluate expressions and directives (forEach/if/groupBy) against the data
+  → BueloDocument (typed IR, no pending expressions)
   → recipe (QuestPDF / ClosedXML)
   → bytes (PDF / XLSX)
 ```
@@ -47,7 +47,7 @@ Every file declares a `kind` at the top. A product = a set of these files (in th
 
 **Name resolution:** **template-local** artifact first, then **global registry**. Collision → compilation error with the origin of each definition.
 
-**Versioning:** `use: layoutPadrao@2` (optional pin). No pin = latest version.
+**Versioning:** `use: defaultLayout@2` (optional pin). No pin = latest version.
 
 ---
 
@@ -55,35 +55,35 @@ Every file declares a `kind` at the top. A product = a set of these files (in th
 
 ```yaml
 kind: report
-name: fatura
+name: invoice
 
 meta:
   engine: declarative          # declarative | csharp
   recipe: pdf                  # pdf | excel
   page: { size: A4, margin: 2cm, orientation: portrait }
 
-import:                        # bibliotecas que este report usa
-  - styles: corporativo
+import:                        # libraries this report uses
+  - styles: corporate
   - formats: br
-  - component: layoutPadrao
+  - component: defaultLayout
 
 data:
-  source: fatura.json          # binding de dados (arquivo, ou injetado via API)
+  source: invoice.json         # data binding (file, or injected via API)
 
-use: layoutPadrao              # opcional: envolve o report num componente de layout
+use: defaultLayout             # optional: wraps the report in a layout component
 with:
-  nomeRelatorio: "Fatura #{{ data.numero }}"
+  reportName: "Invoice #{{ data.number }}"
 
-content:                       # blocos do corpo (preenche o slot do layoutPadrao)
-  - text: { value: "Itens", class: titulo }
-  - table: { ... }             # ver §5
-  - if: "{{ data.comentarios }}"
-    card: { class: nota }
+content:                       # body blocks (fill the defaultLayout slot)
+  - text: { value: "Items", class: title }
+  - table: { ... }             # see §5
+  - if: "{{ data.comments }}"
+    card: { class: note }
     content:
-      - markdown: "{{ data.comentarios }}"
+      - markdown: "{{ data.comments }}"
 ```
 
-`meta` carries what today lives in `TemplateRecord` (engine, recipe/`OutputFormat`, `PageSettings`). `use`/`with` is the standard-layout mechanism (§7).
+`meta` carries what today lives in `TemplateRecord` (engine, recipe/`OutputFormat`, `PageSettings`). `use`/`with` is the default-layout mechanism (§7).
 
 ---
 
@@ -111,9 +111,9 @@ Each block maps to an IR node and, from there, to a QuestPDF call. Core list (v1
 
 ```yaml
 page:
-  header:  [ ... ]    # repete no topo de cada página
-  content: [ ... ]    # fluxo principal
-  footer:  [ ... ]    # repete no rodapé (page/pageCount disponíveis)
+  header:  [ ... ]    # repeats at the top of each page
+  content: [ ... ]    # main flow
+  footer:  [ ... ]    # repeats at the bottom (page/pageCount available)
 ```
 
 ### Sizing
@@ -126,9 +126,9 @@ Three forms, combinable (precedence: inline > class > theme):
 
 ```yaml
 text:
-  value: "Relatório"
-  class: titulo                              # de um `kind: styles`
-  style: { color: "#c00", bold: true }       # override inline
+  value: "Report"
+  class: title                               # from a `kind: styles`
+  style: { color: "#c00", bold: true }       # inline override
 ```
 
 ---
@@ -137,17 +137,17 @@ text:
 
 ```yaml
 table:
-  data: data.itens                # array a iterar
+  data: data.items                # array to iterate
   rowStyle: { borderBottom: "1px #DDD", paddingY: 5 }
   columns:
     - { width: 25px, header: "#",        cell: "{{ index + 1 }}" }
-    - { width: 3*,   header: "Produto",  cell: "{{ item.nome }}" }
-    - { width: 1*,   header: "Unitário", cell: "{{ item.preco | moeda }}", class: monetario }
-    - { width: 1*,   header: "Qtd",      cell: "{{ item.qtd }}", align: right }
-    - { width: 1*,   header: "Total",    cell: "{{ moeda(item.preco * item.qtd) }}", class: monetario }
+    - { width: 3*,   header: "Product",  cell: "{{ item.name }}" }
+    - { width: 1*,   header: "Unit",     cell: "{{ item.price | moeda }}", class: monetary }
+    - { width: 1*,   header: "Qty",      cell: "{{ item.qty }}", align: right }
+    - { width: 1*,   header: "Total",    cell: "{{ moeda(item.price * item.qty) }}", class: monetary }
   footer:
     - { span: 4, text: "Total", style: { bold: true, align: right } }
-    - { text: "{{ moeda(sum(data.itens, 'preco * qtd')) }}", class: monetario }
+    - { text: "{{ moeda(sum(data.items, 'price * qty')) }}", class: monetary }
 ```
 
 `cell` is an expression evaluated per row; `item`, `index`, `first`, `last` are row context variables.
@@ -156,11 +156,11 @@ table:
 
 ```yaml
 table:
-  data: data.colaboradores
-  groupBy: departamento
+  data: data.employees
+  groupBy: department
   group:
     header: { text: "{{ group.key }}", style: { bold: true, background: "#E8E8E8" } }
-    footer: { text: "Subtotal: {{ moeda(sum(group.items, 'salario')) }}", class: monetario }
+    footer: { text: "Subtotal: {{ moeda(sum(group.items, 'salary')) }}", class: monetary }
   columns: [ ... ]
 ```
 
@@ -171,7 +171,7 @@ table:
 **Principle (the anti-inner-platform line):** expressions are **pure, single-line, deterministic, side-effect-free**. There is no imperative `for`/`if`, function definition, or state. Flow control lives in **directives** (`forEach`/`if`/`groupBy`). Real algorithms live in a **C# extension** (self-hosted ⇒ cheap and safe). This boundary is what keeps the YAML from becoming a bad language.
 
 ### Data access
-`data.campo`, `data.lista[0].x`, and in the row/group scope: `item`, `index`, `first`, `last`, `group.key`, `group.items`.
+`data.field`, `data.list[0].x`, and in the row/group scope: `item`, `index`, `first`, `last`, `group.key`, `group.items`.
 
 ### Context variables
 `now`, `today`, `page`, `pageCount`, `report.name`.
@@ -191,12 +191,12 @@ arithmetic `+ - * / %`, comparison `== != < <= > >=`, logical `&& || !`, ternary
 ### Reusable named expressions (`kind: lib`)
 ```yaml
 kind: lib
-name: vendas
+name: sales
 expr:
-  precoFinal: "{{ price * (1 - desconto) }}"
-  margemPct:  "{{ (receita - custo) / receita * 100 }}"
+  finalPrice: "{{ price * (1 - discount) }}"
+  marginPct:  "{{ (revenue - cost) / revenue * 100 }}"
 ```
-Usage: `{{ vendas.precoFinal }}` (with `item`/`data` in scope).
+Usage: `{{ sales.finalPrice }}` (with `item`/`data` in scope).
 
 ---
 
@@ -206,23 +206,23 @@ Reuse mechanism. Replaces OOP inheritance (today's abstract `LayoutPadrao`) with
 
 ```yaml
 kind: component
-name: layoutPadrao
+name: defaultLayout
 params:
-  nomeRelatorio: { type: string }
-  nomeEmpresa:   { type: string, default: "Contar Consultoria e Contabilidade" }
+  reportName:  { type: string }
+  companyName: { type: string, default: "Contar Consultoria e Contabilidade" }
 slots: [content]
 body:
   page:
     size: A4
     margin: 24
-    header: { use: cabecalhoPadrao, empresa: "{{ nomeEmpresa }}", relatorio: "{{ nomeRelatorio }}" }
-    content: { slot: content }            # ponto de injeção do report
-    footer:  { use: rodapePadrao, empresa: "{{ nomeEmpresa }}" }
+    header: { use: defaultHeader, company: "{{ companyName }}", report: "{{ reportName }}" }
+    content: { slot: content }            # report injection point
+    footer:  { use: defaultFooter, company: "{{ companyName }}" }
 ```
 
 - **Scope (recommended decision):** explicit params + **minimal** ambient context (`now`, `page`, `pageCount`). The component does **not** see the report's `data` unless it's received via `with`. Hygiene = safe reuse.
-- **Slots:** one or more named points; the report fills them via `content:` (default slot) or `slots: { nome: [...] }`.
-- **Nesting:** components use components (`cabecalhoPadrao` above).
+- **Slots:** one or more named points; the report fills them via `content:` (default slot) or `slots: { name: [...] }`.
+- **Nesting:** components use components (`defaultHeader` above).
 
 ---
 
@@ -231,7 +231,7 @@ body:
 ```yaml
 kind: validator
 name: cpf
-# Degrau 1 — declarativo (formato + checksum comum)
+# Step 1 — declarative (format + common checksum)
 format: "###.###.###-##"
 rules:
   - { digits: 11 }
@@ -241,16 +241,16 @@ rules:
 ```yaml
 kind: validator
 name: steuerId
-# Degrau 2 — expressão pura (check-digit que cabe em reduce)
+# Step 2 — pure expression (check-digit that fits in a reduce)
 expr: "{{ len(digits(id)) == 11 && checkDigit(digits(id)) == last(digits(id)) }}"
 params: [id]
 ```
 
 ```yaml
 kind: validator
-name: steuerIdComplexo
-# Degrau 3 — referência a extension C# registrada (self-hosted)
-ref: HelpersAlemaes.ValidarSteuerId
+name: steuerIdComplex
+# Step 3 — reference to a registered C# extension (self-hosted)
+ref: GermanHelpers.ValidateSteuerId
 ```
 
 Usage in data/fields: `validate: cpf` on a column or binding. Steps 1–2 are safe to share in the global registry; step 3 (code) only enters via local registry/extension.
@@ -268,13 +268,13 @@ BueloDocument
   Meta { page, recipe, fonts }
   Page { header: Node[], content: Node[], footer: Node[] }
 
-Node (abstrato) — todos carregam Style resolvido:
+Node (abstract) — all carry a resolved Style:
   TextNode      { runs: Run[] }                 Run { text, style }
   RowNode       { items: { size, node }[] }
   ColumnNode    { items: Node[], spacing }
   TableNode     { columns: Col[], rows: Cell[][], groups?: Group[], footer?: Cell[] }
   ImageNode     { source, fit }
-  ContainerNode { kind: card|panel, children: Node[] }   // borda/fundo/padding no Style
+  ContainerNode { kind: card|panel, children: Node[] }   // border/background/padding in Style
   ChartNode     { type, series, axis }
   ChartNode/LineNode/SpacerNode/PageBreakNode ...
 
@@ -318,7 +318,7 @@ Each `kind` gets a **JSON Schema**. On the frontend, `monaco-yaml` + that schema
 
 > **Status 2026-06-28:** almost everything here has been **decided and implemented**. (1) YAML only ✅ · (2) markdown
 > leads ✅ (`markdown` block; `html`-subset not done) · (3) stdlib v1 delivered ✅ · (4) **optional** pin
-> (advisory — `StripPin` removes `@versão`, doesn't validate) · (5) component scope = params + minimal
+> (advisory — `StripPin` removes `@version`, doesn't validate) · (5) component scope = params + minimal
 > ambient ✅ · (6) chart = v2 (out). Only loose ends remain: `validate:` on a column during render, the IR's
 > Excel recipe, and the `html`-subset — see handoff.
 
