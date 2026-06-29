@@ -142,12 +142,12 @@ table:
   columns:
     - { width: 25px, header: "#",        cell: "{{ index + 1 }}" }
     - { width: 3*,   header: "Product",  cell: "{{ item.name }}" }
-    - { width: 1*,   header: "Unit",     cell: "{{ item.price | moeda }}", class: monetary }
+    - { width: 1*,   header: "Unit",     cell: "{{ item.price | currency }}", class: monetary }
     - { width: 1*,   header: "Qty",      cell: "{{ item.qty }}", align: right }
-    - { width: 1*,   header: "Total",    cell: "{{ moeda(item.price * item.qty) }}", class: monetary }
+    - { width: 1*,   header: "Total",    cell: "{{ currency(item.price * item.qty) }}", class: monetary }
   footer:
     - { span: 4, text: "Total", style: { bold: true, align: right } }
-    - { text: "{{ moeda(sum(data.items, 'price * qty')) }}", class: monetary }
+    - { text: "{{ currency(sum(data.items, 'price * qty')) }}", class: monetary }
 ```
 
 `cell` is an expression evaluated per row; `item`, `index`, `first`, `last` are row context variables.
@@ -160,7 +160,7 @@ table:
   groupBy: department
   group:
     header: { text: "{{ group.key }}", style: { bold: true, background: "#E8E8E8" } }
-    footer: { text: "Subtotal: {{ moeda(sum(group.items, 'salary')) }}", class: monetary }
+    footer: { text: "Subtotal: {{ currency(sum(group.items, 'salary')) }}", class: monetary }
   columns: [ ... ]
 ```
 
@@ -181,12 +181,12 @@ arithmetic `+ - * / %`, comparison `== != < <= > >=`, logical `&& || !`, ternary
 
 ### Standard library (engine stdlib — extends `IHelperRegistry`)
 - **Aggregation:** `sum(lista, 'expr')`, `avg`, `count`, `min`, `max`
-- **Format (BR by default):** `moeda(x)`, `data(x, 'dd/MM/yyyy')`, `cnpj(x)`, `cpf(x)`, `cep(x)`, `telefone(x)`, `percent(x)`
+- **Format (BR by default):** `currency(x)`, `date(x, 'dd/MM/yyyy')`, `cnpj(x)`, `cpf(x)`, `cep(x)`, `phone(x)`, `percent(x)`
 - **String:** `upper`, `lower`, `trim`, `join(lista, sep)`, `len`, `mask(x, '##.###')`, `digits(x)`
 - **Logic:** `if(cond, a, b)`, `coalesce(...)`
 
 ### Pipes (sugar)
-`{{ data.cnpj | cnpj }}` ≡ `{{ cnpj(data.cnpj) }}`; chainable: `{{ data.valor | moeda }}`.
+`{{ data.cnpj | cnpj }}` ≡ `{{ cnpj(data.cnpj) }}`; chainable: `{{ data.valor | currency }}`.
 
 ### Reusable named expressions (`kind: lib`)
 ```yaml
