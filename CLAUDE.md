@@ -38,6 +38,16 @@ git submodule update --remote --merge
 git add BueloApi BueloWeb && git commit -m "chore: bump submodules"
 ```
 
+## Política de commit & push
+
+**Sempre que os checks/testes do repo passarem (verde), faça commit das mudanças e dê push** — não acumule trabalho local. Se algum teste/check falhar, **não** commite nem pushe: conserte primeiro.
+
+Fluxo com submodules (commits/PRs acontecem **dentro** do submodule):
+1. No submodule alterado, rode os checks (`BueloApi`: `dotnet build` + `dotnet test`; `BueloWeb`: `pnpm typecheck` + `pnpm build`). Verdes → `git commit` + `git push`.
+2. No guarda-chuva, `git add <submodule>` (bump do ponteiro) + `git commit` + `git push`.
+
+Commits vão direto no `master` de cada repo (convenção atual deste projeto).
+
 ## Rodar os dois juntos (dev)
 
 ```powershell
