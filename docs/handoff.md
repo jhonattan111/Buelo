@@ -98,10 +98,15 @@ Persistence is **database-backed**. Recent work focused on editor UX, validation
 - **vite is stuck on major 6** — `vite-plugin-monaco-editor@1.1.0` (abandoned, patched for Node compat)
   breaks on vite 7/8 **and** can't drive monaco 0.55. The native `?worker` migration was attempted and
   **reverted**: on monaco 0.54 it fails in Vite **dev** with `module is not defined` (workers fall back
-  to the main thread → YAML validation dead); `worker.format:'es'` + `optimizeDeps` tweaks didn't help.
-  Net: both pins (monaco 0.54, vite 6) are currently load-bearing; the editor stack is wedged until
-  monaco-yaml catches up. A *maintained alternative* Vite-monaco plugin (keeping monaco 0.54) could
-  still unstick the vite pin — untried.
+  to the main thread → YAML validation dead); `worker.format:'es'` + `optimizeDeps` include/exclude
+  didn't help. **Important nuance (verified 2026-06-30):** the native `?worker` **build is clean** —
+  `pnpm build` emits proper ESM worker bundles (editor/json/yaml) with no top-level `module` refs, so
+  it's *production-viable*. The wall is **Vite 6 dev** specifically (it serves the workers' CJS deps
+  un-prebundled). A newer **Vite (7/8)** likely fixes the dev worker handling — but that requires
+  dropping the plugin in the same move (the plugin breaks on vite 7/8). So the realistic native path is
+  a combined "drop plugin + bump Vite + native workers" change (speculative, needs browser verification).
+  Net: both pins (monaco 0.54, vite 6) are currently load-bearing. A *maintained alternative* Vite-monaco
+  plugin (keeping monaco 0.54) could also unstick the vite pin — untried.
 - **Commit & push policy:** green checks → commit + push, then bump the umbrella pointer. See umbrella
   `CLAUDE.md`.
 
