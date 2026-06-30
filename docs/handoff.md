@@ -76,8 +76,11 @@ Persistence is **database-backed**. Recent work focused on editor UX, validation
   --settings coverlet.runsettings` (Cobertura); `coverlet.runsettings` excludes Program, EF
   migrations, the Postgres migrations assembly, and `[ExcludeFromCodeCoverage]`. ~77% line / 63% branch.
 - **Frontend:** Vitest + @vue/test-utils (happy-dom), `src/**/*.test.ts`; `pnpm test` / `test:run` /
-  `test:coverage` (v8). First tests cover the dirty-baseline logic, module gathering, and the status
-  bar. Coverage is low (~9%) — a starting point; Monaco-coupled files are excluded (need the editor).
+  `test:coverage` (v8). **39 tests / 12 files, ~20% lines** (was ~9%): services (validate/schema/
+  template), stores (reportStore render orchestration, templateStore CRUD), composables
+  (useActiveTemplate dirty-baseline, useReportSettings, useOnboarding) + the showcase data. The
+  remaining untested code is mostly Monaco-coupled `.vue` components (need the editor runtime →
+  excluded from coverage); pushing higher means component/E2E tests.
 - **CI:** GitHub Actions in **each submodule** (`.github/workflows/ci.yml`) — they are separate repos,
   so CI runs where the code is. Backend: build + test + coverage. Frontend: typecheck + build + test +
   coverage. No coverage gate yet (measure first). The umbrella only tracks pointers — no CI.
