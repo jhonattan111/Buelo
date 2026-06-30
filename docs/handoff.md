@@ -89,10 +89,19 @@ Persistence is **database-backed**. Recent work focused on editor UX, validation
 
 ## Constraints / gotchas (don't trip on these)
 
-- **Do NOT bump `monaco-editor` past 0.54.x** until `monaco-yaml`/`monaco-worker-manager` support
-  monaco's new `createWebWorker` API — 0.55+ breaks the YAML worker.
-- **vite is stuck on major 6** — `vite-plugin-monaco-editor@1.1.0` (abandoned) breaks on vite 7/8.
-  Migrating off the plugin to the native `?worker` setup is optional/deferred.
+- **Do NOT bump `monaco-editor` past 0.54.x** — **re-verified live 2026-06-30** with the *latest*
+  `monaco-editor@0.55.1` + `monaco-yaml@5.5.1`: the YAML worker still fails with
+  `Cannot use 'in' operator to search for 'then' in undefined` because `monaco-worker-manager@2.0.1`
+  (a monaco-yaml dep, unchanged) still calls monaco's old `createWebWorker` API that 0.55 removed.
+  This breaks identically under **both** the plugin and the native `?worker` setup. Blocked **upstream** —
+  revisit when monaco-yaml updates monaco-worker-manager for monaco 0.55+.
+- **vite is stuck on major 6** — `vite-plugin-monaco-editor@1.1.0` (abandoned, patched for Node compat)
+  breaks on vite 7/8 **and** can't drive monaco 0.55. The native `?worker` migration was attempted and
+  **reverted**: on monaco 0.54 it fails in Vite **dev** with `module is not defined` (workers fall back
+  to the main thread → YAML validation dead); `worker.format:'es'` + `optimizeDeps` tweaks didn't help.
+  Net: both pins (monaco 0.54, vite 6) are currently load-bearing; the editor stack is wedged until
+  monaco-yaml catches up. A *maintained alternative* Vite-monaco plugin (keeping monaco 0.54) could
+  still unstick the vite pin — untried.
 - **Commit & push policy:** green checks → commit + push, then bump the umbrella pointer. See umbrella
   `CLAUDE.md`.
 
@@ -105,8 +114,10 @@ Persistence is **database-backed**. Recent work focused on editor UX, validation
   `Buelo:Database:ConnectionString` (env: `Buelo__Database__Provider` / `Buelo__Database__ConnectionString`).
 - **Optional editor polish (ideas, not committed work):** tab overflow "⌄" menu like VS, drag-to-reorder
   tabs, "Save all" (Ctrl+K S).
-- **vite-plugin-monaco-editor migration** to native `?worker` (would unstick the vite 6 / monaco 0.54
-  pins) — deferred.
+- **Monaco stack upgrade / plugin migration — BLOCKED upstream (investigated 2026-06-30).** See the
+  Constraints note: monaco 0.55 + monaco-yaml break (worker-manager not updated), native `?worker`
+  breaks on 0.54 in dev. Reverted; nothing committed. Re-attempt when monaco-yaml ships a fixed
+  monaco-worker-manager, or try a maintained alternative Vite-monaco plugin to unstick *just* the vite pin.
 
 ## How to run
 
