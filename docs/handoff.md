@@ -87,8 +87,11 @@ Persistence is **database-backed**. Recent work focused on editor UX, validation
 
 ## Open / optional (pick up here)
 
-- **Postgres `Migrate()` is untested against a live server** — only the SQLite path was verified live
-  (no Postgres available here). Validate on a real Postgres before relying on it.
+- **Postgres path — VALIDATED live (2026-06-30).** Against a real Postgres server, startup applied the
+  Npgsql `InitialCreate` migration (real `__EFMigrationsHistory`, not `EnsureCreated`), `Migrate()`
+  created the database, seeding ran, and workspace + render-log read/write round-tripped (render-history
+  returned the logged event). Provider via `Buelo:Database:Provider=postgres` +
+  `Buelo:Database:ConnectionString` (env: `Buelo__Database__Provider` / `Buelo__Database__ConnectionString`).
 - **Optional editor polish (ideas, not committed work):** tab overflow "⌄" menu like VS, drag-to-reorder
   tabs, "Save all" (Ctrl+K S).
 - **vite-plugin-monaco-editor migration** to native `?worker` (would unstick the vite 6 / monaco 0.54
