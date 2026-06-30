@@ -1,17 +1,17 @@
 # Session handoff — current state (read this first)
 
-> Authoritative state doc. Last updated: 2026-06-29. Replaces the old dated handoffs.
+> Authoritative state doc. Last updated: 2026-06-30. Replaces the old dated handoffs.
 > Everything below is committed and pushed to `origin/master` on all three repos.
 
 ## Latest commits (all on origin/master)
 
 | Repo | Commit |
 |---|---|
-| BueloApi | `4d23332` |
+| BueloApi | `06e1e73` |
 | BueloWeb | `62cfd2d` |
-| umbrella | `6411bdd` (+ this handoff) |
+| umbrella | `8123296` (+ this handoff) |
 
-Checks: **`dotnet test` 185/185 green**; BueloWeb `pnpm typecheck` + `pnpm build` green.
+Checks: **`dotnet test` 203/203 green**; BueloWeb `pnpm typecheck` + `pnpm build` green.
 
 ## What this session delivered
 
@@ -33,27 +33,24 @@ The declarative engine was already done. This session made the declarative path 
 - **Do NOT bump `monaco-editor` past 0.54.x** until `monaco-yaml`/`monaco-worker-manager` support monaco's new `createWebWorker` API — 0.55+ breaks the YAML worker.
 - **vite is stuck on major 6** — `vite-plugin-monaco-editor@1.1.0` (abandoned) breaks on vite 7/8. Autocomplete works today via that plugin + the 0.54 pin. Migrating off the plugin to the native `?worker` setup is optional/deferred.
 - **Declarative render from the UI is self-contained only** — `import:` of modules isn't passed yet. Next step: gather the workspace's `*.{styles,component,theme,...}.yml` and send them in the `Modules` field of `render-declarative`.
-- **Durability gap:** C# templates (`ITemplateStore`) and global artefacts default to **InMemory** — lost on restart. FileSystem is opt-in (`AddBueloFileSystemStore()`).
-- **EF migrations are blocked** (EF Design pulls a Roslyn version that conflicts with the Engine's `CodeAnalysis.CSharp`), so the operational DB uses `EnsureCreated()`, not migrations. Matters only if we lean into a DB. Fix path: a separate `Buelo.Persistence` project that references only Contracts + EF (no Engine/Roslyn).
 
-## OPEN — pick up here: persistence decision (in progress)
+## DONE — persistence is now database-backed (was the open decision)
 
-The user is **not convinced about file-based storage, for backup reasons**, and we were mid-discussion.
+The user rejected files+git on operational grounds (auto-committing every CRUD makes the app a fragile git client) and chose a **database**, SQLite **or** Postgres. Implemented in full:
 
-Current persistence:
-- **Declarative definitions** → `FileSystemDefinitionStore` (`definitions/{kind}/{name}.yml`, git-friendly).
-- **Editor workspace** → `FileSystemWorkspaceStore` (`templates/`).
-- **C# templates / global artefacts** → InMemory by default (durability gap above).
-- **Render history / audit** → EF Core, SQLite default / Postgres by `Buelo:Database:Provider`.
+- **New `Buelo.Persistence` project** (Contracts + EF only, **no Roslyn**) — this isolation is what unblocks EF migrations: the Design tooling no longer collides with Engine's `CodeAnalysis.CSharp`. `InitialCreate` migration is generated and lives in `Buelo.Persistence/Migrations/`.
+- **All durable content is now in the DB by default:** definitions, editor workspace, C# templates (+ version history), global artefacts, render log. EF stores implement the existing Contracts interfaces and are singletons over `IDbContextFactory<BueloDbContext>` (short-lived context per op → no captive dependency in the singleton engine). `AddBueloPersistence(config)` `Replace`s the engine's in-memory/file-system defaults.
+- **Provider switch** `Buelo:Database:Provider` = `sqlite` (default, single file `buelo.db`) | `postgres`; connection via `Buelo:Database:ConnectionString`. `EnsureBueloDatabase()` runs `Migrate()` on SQLite, `EnsureCreated()` on Postgres.
+- **Durability gap fixed** — templates/artefacts/workspace survive restart (verified live). **Backup story:** SQLite file copy / Litestream, or Postgres `pg_dump`/PITR/managed.
+- **First-run seeding** imports the shipped `definitions/` examples into the DB (idempotent, `_system/seeded` marker — deletions don't resurrect). The on-disk `definitions/` is now seed data only.
+- **Engine** dropped the EF packages + its `Persistence/` folder; `NullRenderLog` (the no-DB fallback) stays. The `FileSystem*`/`InMemory*` stores remain for tests + `AddBueloFileSystemStore()`.
+- **Tests:** +18 EF store tests over a throwaway SQLite db (185 → 203 green).
 
-The user **decided the deployment model: self-hosted, single instance** (single-tenant — matches today's design). For that model my lean is:
-- **Files + git** (auto-commit + push to a remote) — for YAML content this is arguably the *best* backup story: versioned, diffable, off-site, restore-by-commit. Addresses the backup concern by embracing git instead of loose files.
-- or **SQLite** (single `.db`, transactional, trivial to back up by copying) if they'd rather not depend on git for content.
-- Postgres is overkill for a single instance.
-
-Next session: land the decision, then likely (1) fix the InMemory default so templates/artefacts are durable, and (2) implement the chosen backup story (e.g., make the content store a git repo with auto-commit+push, or move content to SQLite). See `BueloApi/README.md` §Technology Recommendation for Persistence for the prior write-up.
-
-Minor: a background task chip exists to untrack `tsconfig.tsbuildinfo` (gitignore it).
+### Optional follow-ups (not blocking)
+- **Postgres migrations:** today Postgres uses `EnsureCreated()` (no schema evolution). Add an Npgsql migration set when the schema first changes for a Postgres deployment.
+- **`BueloApi/README.md` is stale** (still describes the removed Sections/IReport/DSL architecture and an old persistence recommendation). CLAUDE.md is canonical; README needs a rewrite pass.
+- **Declarative render `import:` modules** from the UI still aren't passed (see autocomplete/render notes above).
+- Background task chip exists to untrack `tsconfig.tsbuildinfo` (gitignore it).
 
 ## How to run
 
