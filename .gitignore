@@ -1,3 +1,6 @@
+# Local docker-compose secrets (use .env.example as the template)
+.env
+
 # Claude Code — settings pessoais (não versionar)
 .claude/settings.local.json
 

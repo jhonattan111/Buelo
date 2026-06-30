@@ -1,0 +1,59 @@
+name: buelo
+
+# Turnkey self-host: PostgreSQL + the API + the web editor.
+#   1. cp .env.example .env   (set POSTGRES_PASSWORD)
+#   2. docker compose up -d --build
+#   3. open http://localhost:${WEB_PORT:-8080}
+# The web (nginx) proxies /api, /ping and /health to the API, so the browser talks to a single
+# origin (no CORS). The API migrates + seeds the database on first boot.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-buelo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-buelo}
+    volumes:
+      - buelo-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-buelo} -d ${POSTGRES_DB:-buelo}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./BueloApi
+    environment:
+      Buelo__Database__Provider: postgres
+      Buelo__Database__ConnectionString: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-buelo};Username=${POSTGRES_USER:-buelo};Password=${POSTGRES_PASSWORD}"
+      Buelo__Cors__Origins: ${BUELO_CORS_ORIGINS:-http://localhost:8080}
+      Buelo__ApiKey: ${BUELO_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    # The web service proxies the API. Expose it on the host only for direct access:
+    # ports: ["5238:8080"]
+
+  web:
+    build:
+      context: ./BueloWeb
+      args:
+        VITE_API_BASE_URL: ""
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  buelo-pgdata:

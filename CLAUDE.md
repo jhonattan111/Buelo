@@ -61,6 +61,26 @@ dotnet run --project BueloApi/Buelo.Api     # terminal 1 → http://localhost:52
 cd BueloWeb && pnpm install && pnpm dev      # terminal 2 → http://localhost:5173
 ```
 
+## Deploy (Docker, self-host)
+
+Turnkey stack — **PostgreSQL + API + web editor** — via [`docker-compose.yml`](docker-compose.yml):
+
+```bash
+cp .env.example .env          # set POSTGRES_PASSWORD
+docker compose up -d --build  # builds the API + web images, starts Postgres
+# open http://localhost:8080
+```
+
+- The **web** (nginx) serves the SPA and **proxies** `/api`, `/ping`, `/health` to the **API**, so the
+  browser uses a single origin (no CORS). The **API** migrates + seeds the database on first boot.
+- **Postgres** is the provider here (`Buelo__Database__Provider=postgres`); data persists in the
+  `buelo-pgdata` volume — back up with `pg_dump`. (Validated live against a real Postgres.)
+- **Health:** API exposes `/ping` (liveness) and `/health` (readiness — checks the DB). Compose waits for
+  Postgres healthy before the API, then health-checks the API.
+- Images: [`BueloApi/Dockerfile`](BueloApi/Dockerfile) (ASP.NET publish) and
+  [`BueloWeb/Dockerfile`](BueloWeb/Dockerfile) (Vite build → nginx). Config via env in `.env`
+  (template: [`.env.example`](.env.example)); secrets stay out of git.
+
 ## AI conventions in this product
 
 - Each repo has its own `CLAUDE.md` as the source of truth; `docs/` in each one keeps a history of sprints (reference, not current state).

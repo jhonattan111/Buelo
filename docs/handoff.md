@@ -7,9 +7,9 @@
 
 | Repo | Commit |
 |---|---|
-| BueloApi | `1b4360e` |
-| BueloWeb | `2684083` |
-| umbrella | `3a4de5a` (+ this handoff bump) |
+| BueloApi | `9ce9169` |
+| BueloWeb | `019cd18` |
+| umbrella | `ca3cef2` (+ this handoff bump) |
 
 Checks: **backend `dotnet test` 203/203 green (coverage ~77% line)**; frontend `pnpm typecheck` +
 `pnpm build` + `pnpm test:run` green (10 tests).
@@ -59,6 +59,17 @@ Persistence is **database-backed**. Recent work focused on editor UX, validation
 - Examples: `invoice`, `employees` (groupBy+sum), `dashboard` (cards/row/panel), **`sales`
   (tabular → Excel output, preset)**, **`statement` importing `letterhead.component.yml` (external
   layout via import/use/with)**, `letter.cs` (C#), plus per-report data and a `.csx` helper.
+
+### Deploy (Docker, self-host) — NEW
+- Turnkey **PostgreSQL + API + web** via umbrella [`docker-compose.yml`](../docker-compose.yml):
+  `cp .env.example .env` (set `POSTGRES_PASSWORD`) → `docker compose up -d --build` → `http://localhost:8080`.
+- `BueloApi/Dockerfile` (publish → aspnet, ships `definitions/` for seeding) and `BueloWeb/Dockerfile`
+  (Vite build → nginx). The **web proxies** `/api`, `/ping`, `/health` to the API → browser is
+  same-origin (no CORS). API migrates + seeds on first boot.
+- New: **CORS configurable** (`Buelo:Cors:Origins`), **`/health`** readiness probe (DB check) alongside
+  `/ping`. pnpm pinned via `package.json` `packageManager`.
+- **Not container-built here** (no Docker on the dev box) — Dockerfiles/compose written to standard
+  patterns; the API code changes (CORS-from-config, `/health`) and the compose YAML were verified.
 
 ### Testing & CI
 - **Backend:** xUnit, 203 tests. Coverage via `dotnet test --collect:"XPlat Code Coverage"
