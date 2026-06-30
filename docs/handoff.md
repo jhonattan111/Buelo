@@ -7,11 +7,12 @@
 
 | Repo | Commit |
 |---|---|
-| BueloApi | `9a4240e` |
-| BueloWeb | `7b4929d` |
+| BueloApi | `1b4360e` |
+| BueloWeb | `2684083` |
 | umbrella | `3a4de5a` (+ this handoff bump) |
 
-Checks: **`dotnet test` 203/203 green**; BueloWeb `pnpm typecheck` + `pnpm build` green.
+Checks: **backend `dotnet test` 203/203 green (coverage ~77% line)**; frontend `pnpm typecheck` +
+`pnpm build` + `pnpm test:run` green (10 tests).
 
 ## Where the product stands
 
@@ -58,6 +59,17 @@ Persistence is **database-backed**. Recent work focused on editor UX, validation
 - Examples: `invoice`, `employees` (groupBy+sum), `dashboard` (cards/row/panel), **`sales`
   (tabular → Excel output, preset)**, **`statement` importing `letterhead.component.yml` (external
   layout via import/use/with)**, `letter.cs` (C#), plus per-report data and a `.csx` helper.
+
+### Testing & CI
+- **Backend:** xUnit, 203 tests. Coverage via `dotnet test --collect:"XPlat Code Coverage"
+  --settings coverlet.runsettings` (Cobertura); `coverlet.runsettings` excludes Program, EF
+  migrations, the Postgres migrations assembly, and `[ExcludeFromCodeCoverage]`. ~77% line / 63% branch.
+- **Frontend:** Vitest + @vue/test-utils (happy-dom), `src/**/*.test.ts`; `pnpm test` / `test:run` /
+  `test:coverage` (v8). First tests cover the dirty-baseline logic, module gathering, and the status
+  bar. Coverage is low (~9%) — a starting point; Monaco-coupled files are excluded (need the editor).
+- **CI:** GitHub Actions in **each submodule** (`.github/workflows/ci.yml`) — they are separate repos,
+  so CI runs where the code is. Backend: build + test + coverage. Frontend: typecheck + build + test +
+  coverage. No coverage gate yet (measure first). The umbrella only tracks pointers — no CI.
 
 ### Docs (canonical)
 - `BueloApi/CLAUDE.md` (backend) and `BueloWeb/CLAUDE.md` (frontend) are the source of truth.
