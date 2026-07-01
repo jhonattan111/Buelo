@@ -8,11 +8,12 @@
 | Repo | Commit |
 |---|---|
 | BueloApi | `a2abdd9` |
-| BueloWeb | `8cc03f4` |
+| BueloWeb | `b037942` |
 | umbrella | `cb4ea9b` (+ this handoff bump) |
 
-Checks (all green in CI): **backend 256 xUnit tests (~84% line)**; **frontend 45 unit tests
-+ 2 Playwright E2E**; lint/format, vulnerability scan and CodeQL gates pass on every push/PR.
+Checks (all green in CI): **backend 256 xUnit tests (~84% line)**; **frontend 140 unit tests
+(~35% stmts) + 2 Playwright E2E**; lint/format, vulnerability scan and CodeQL gates pass on
+every push/PR.
 
 ## Where the product stands
 
@@ -68,7 +69,8 @@ push was a full **infrastructure pass**: security automation, quality gates, con
 
 ### Testing, CI/CD & security (infra pass — 2026-07-01)
 - **Unit tests:** backend 256 xUnit (~84% line / 68% branch, coverlet — the controller layer was
-  raised from 34% to 79%); frontend 45 Vitest (`src/**/*.test.ts`, happy-dom). Monaco-coupled `.vue`
+  raised from 34% to 79%); frontend 140 Vitest (`src/**/*.test.ts`, happy-dom, ~35% stmts / 23%
+  branch — up from ~20%/9%; services ~93%, stores ~82%, composables ~62%). Monaco-coupled `.vue`
   are excluded from coverage.
 - **E2E:** **Playwright** (`BueloWeb/e2e/`, `pnpm test:e2e`). `playwright.config.ts` starts **both**
   servers (the API from `../BueloApi/Buelo.Api` + the Vite dev server) and drives Chromium: (1) create
@@ -105,14 +107,20 @@ push was a full **infrastructure pass**: security automation, quality gates, con
 
 ## Open / optional (pick up here)
 
-- **Umbrella branch protection — NOT set.** BueloApi/BueloWeb master are protected (required checks);
-  the umbrella (`jhonattan111/Buelo`) is not. It has no CI, so there's no status check to require — a rule
-  that just blocks force-push + deletion on master is the sensible option (GitHub Settings → Branches, or
-  a ruleset). Decide whether to add it.
-- **Coverage gates** are not enforced yet (measured only). Frontend coverage is low (~20%) because the
-  Monaco-coupled `.vue` are excluded — the E2E suite now covers the integration; component tests could
-  raise unit coverage.
-- **Deprecated dep:** `lucide-vue-next` (migrate to `@lucide/vue`).
+Closed this session (2026-07-01):
+- **`lucide-vue-next` → `@lucide/vue`** — migrated across all 12 icon-importing components
+  (BueloWeb `bfc3154`). Drop-in replacement, same API.
+- **Frontend unit coverage raised** ~20% → ~35% stmts (BueloWeb `b037942`) — added/extended tests
+  for `useWorkspaceTree`, `reportService`/`templateService`/`workspaceService`, `reportStore`,
+  `lib/utils`, `PreviewPanel`. **Coverage gates are still not enforced in CI** (measured only) —
+  the remaining 0%-covered surface is almost entirely presentational `.vue` (`FileTreePanel`,
+  `SidebarTemplates`, `AppLayout`, dialogs, etc.); the E2E suite covers their integration, but
+  component tests could push unit coverage further if desired.
+- **Umbrella branch protection — set.** `master` on `jhonattan111/Buelo` now blocks force-push +
+  deletion (`enforce_admins=false`, matching the submodules' convention). No required status
+  checks — the umbrella has no CI to check against.
+
+Nothing else outstanding; next open items will land here as they come up.
 
 ## How to run
 
