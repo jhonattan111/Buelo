@@ -2,10 +2,13 @@ name: buelo
 
 # Turnkey self-host: PostgreSQL + the API + the web editor.
 #   1. cp .env.example .env   (set POSTGRES_PASSWORD)
-#   2. docker compose up -d --build
+#   2a. docker compose up -d --build          # build both images from source, or
+#   2b. docker compose pull && docker compose up -d   # pull prebuilt images from GHCR (no build)
 #   3. open http://localhost:${WEB_PORT:-8080}
 # The web (nginx) proxies /api, /ping and /health to the API, so the browser talks to a single
 # origin (no CORS). The API migrates + seeds the database on first boot.
+# Prebuilt images are published to ghcr.io/${GHCR_OWNER}/buelo-{api,web} on every push to master
+# (:edge) and version tag (:x.y.z). Pin a release with IMAGE_TAG in .env.
 
 services:
   postgres:
@@ -24,6 +27,9 @@ services:
     restart: unless-stopped
 
   api:
+    # Prebuilt image (published to GHCR by each repo's "Publish image" workflow). `docker compose
+    # pull` fetches it for a no-build turnkey run; `docker compose up --build` builds from source.
+    image: ghcr.io/${GHCR_OWNER:-jhonattan111}/buelo-api:${IMAGE_TAG:-edge}
     build:
       context: ./BueloApi
     environment:
@@ -45,6 +51,7 @@ services:
     # ports: ["5238:8080"]
 
   web:
+    image: ghcr.io/${GHCR_OWNER:-jhonattan111}/buelo-web:${IMAGE_TAG:-edge}
     build:
       context: ./BueloWeb
       args:
