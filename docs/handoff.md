@@ -7,9 +7,9 @@
 
 | Repo | Commit |
 |---|---|
-| BueloApi | `a2abdd9` |
-| BueloWeb | `b037942` |
-| umbrella | `cb4ea9b` (+ this handoff bump) |
+| BueloApi | `dcf49bc` |
+| BueloWeb | `e3d8ea4` |
+| umbrella | `876b73f` (+ this handoff bump) |
 
 Checks (all green in CI): **backend 256 xUnit tests (~84% line)**; **frontend 140 unit tests
 (~35% stmts) + 2 Playwright E2E**; lint/format, vulnerability scan and CodeQL gates pass on
@@ -119,6 +119,18 @@ Closed this session (2026-07-01):
 - **Umbrella branch protection — set.** `master` on `jhonattan111/Buelo` now blocks force-push +
   deletion (`enforce_admins=false`, matching the submodules' convention). No required status
   checks — the umbrella has no CI to check against.
+- **Docs repagination** across all three repos. New `## Documentation conventions` in the umbrella
+  `CLAUDE.md` (README = human entry point, CLAUDE.md = agent canonical/wins on conflict, `docs/` =
+  deep reference + historical sprint log, obsolete docs get deleted not accumulated). BueloApi's
+  declarative-YAML reference is now `docs/reference/` — one file per component (report/blocks/
+  expressions/modules/page-settings), each re-verified against the current code; the 7 docs left over
+  from the April-2026 DSL→QuestPDF migration (some actively wrong — referenced removed `IReport`/
+  `TemplateMode.Sections`) plus the root `ARCHITECTURE.md` are deleted. New `docs/workflows.md` (how
+  to add an endpoint/block/stdlib fn/store/migration). All 42 sprint files (18 BueloApi + 24 BueloWeb)
+  standardized onto one Goal/Status/Dependencies/Scope/Notes template; both `sprint-history.md`
+  index files had their stale "DSL removed, pure C#" framing corrected. The umbrella's
+  `blueprint-schema-canonico.md` is trimmed (components/validators design moved to
+  `BueloApi/docs/reference/modules.md`) and banner-marked as historical/implemented.
 
 Nothing else outstanding; next open items will land here as they come up.
 
