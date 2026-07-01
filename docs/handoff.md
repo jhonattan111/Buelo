@@ -11,7 +11,7 @@
 | BueloWeb | `8cc03f4` |
 | umbrella | `cb4ea9b` (+ this handoff bump) |
 
-Checks (all green in CI): **backend 203 xUnit tests (~77% line)**; **frontend 45 unit tests
+Checks (all green in CI): **backend 256 xUnit tests (~84% line)**; **frontend 45 unit tests
 + 2 Playwright E2E**; lint/format, vulnerability scan and CodeQL gates pass on every push/PR.
 
 ## Where the product stands
@@ -67,8 +67,9 @@ push was a full **infrastructure pass**: security automation, quality gates, con
   the proxy. The GHCR `pull && up` path was also run end-to-end.
 
 ### Testing, CI/CD & security (infra pass — 2026-07-01)
-- **Unit tests:** backend 203 xUnit (~77% line / 63% branch, coverlet); frontend 45 Vitest
-  (`src/**/*.test.ts`, happy-dom). Monaco-coupled `.vue` are excluded from coverage.
+- **Unit tests:** backend 256 xUnit (~84% line / 68% branch, coverlet — the controller layer was
+  raised from 34% to 79%); frontend 45 Vitest (`src/**/*.test.ts`, happy-dom). Monaco-coupled `.vue`
+  are excluded from coverage.
 - **E2E:** **Playwright** (`BueloWeb/e2e/`, `pnpm test:e2e`). `playwright.config.ts` starts **both**
   servers (the API from `../BueloApi/Buelo.Api` + the Vite dev server) and drives Chromium: (1) create
   showcase → open report → Render → assert a PDF blob iframe; (2) overflow menu → Save all. A dedicated
