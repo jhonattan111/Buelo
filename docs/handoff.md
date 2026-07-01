@@ -7,9 +7,9 @@
 
 | Repo | Commit |
 |---|---|
-| BueloApi | `dcf49bc` |
-| BueloWeb | `e3d8ea4` |
-| umbrella | `876b73f` (+ this handoff bump) |
+| BueloApi | `725caea` |
+| BueloWeb | `c48b8c1` |
+| umbrella | `edecbbb` (+ this handoff bump) |
 
 Checks (all green in CI): **backend 256 xUnit tests (~84% line)**; **frontend 140 unit tests
 (~35% stmts) + 2 Playwright E2E**; lint/format, vulnerability scan and CodeQL gates pass on
@@ -83,6 +83,11 @@ push was a full **infrastructure pass**: security automation, quality gates, con
   **vulnerability gates** in CI (`dotnet list package --vulnerable` fails on High/Critical; `pnpm audit
   --prod --audit-level high`). Two high-severity transitive advisories were fixed (see constraints).
 - **CD:** each submodule's `docker-publish.yml` builds + pushes its image to GHCR on master/tag.
+- **Coverage gates (enforced, not just measured):** backend `coverlet.runsettings` sets
+  `Threshold=80,65` (`line,branch`) — a floor below the measured 84.1%/68%. Frontend
+  `vitest.config.ts` sets `coverage.thresholds` (`statements 30 / branches 20 / functions 22 /
+  lines 33`) — a floor below the measured 34.7%/23%/25.7%/36.9%. Both fail the test run (and
+  thus CI) if coverage regresses; neither raises the bar above current reality.
 - **Dependabot auto-merge:** `dependabot-auto-merge.yml` enables auto-merge on patch/minor + github-actions
   PRs; **branch protection** on BueloApi/BueloWeb master requires the CI (and E2E, web) checks with
   `enforce_admins=false` (owner still pushes directly). Major library bumps stay manual.
@@ -108,12 +113,15 @@ push was a full **infrastructure pass**: security automation, quality gates, con
 ## Open / optional (pick up here)
 
 Closed this session (2026-07-01):
+- **Coverage gates** — added enforced floors (see above) so coverage can no longer regress
+  silently in CI, closing the gap the previous session left open ("coverage gates are still
+  not enforced in CI").
 - **`lucide-vue-next` → `@lucide/vue`** — migrated across all 12 icon-importing components
   (BueloWeb `bfc3154`). Drop-in replacement, same API.
 - **Frontend unit coverage raised** ~20% → ~35% stmts (BueloWeb `b037942`) — added/extended tests
   for `useWorkspaceTree`, `reportService`/`templateService`/`workspaceService`, `reportStore`,
-  `lib/utils`, `PreviewPanel`. **Coverage gates are still not enforced in CI** (measured only) —
-  the remaining 0%-covered surface is almost entirely presentational `.vue` (`FileTreePanel`,
+  `lib/utils`, `PreviewPanel`. Coverage gates are now enforced (see above) — the remaining
+  0%-covered surface is almost entirely presentational `.vue` (`FileTreePanel`,
   `SidebarTemplates`, `AppLayout`, dialogs, etc.); the E2E suite covers their integration, but
   component tests could push unit coverage further if desired.
 - **Umbrella branch protection — set.** `master` on `jhonattan111/Buelo` now blocks force-push +
