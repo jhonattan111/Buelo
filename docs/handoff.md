@@ -1,6 +1,6 @@
 # Session handoff — current state (read this first)
 
-> Authoritative state doc. Last updated: 2026-06-30.
+> Authoritative state doc. Last updated: 2026-07-01.
 > Everything below is committed and pushed to `origin/master` on all three repos.
 
 ## Latest commits (all on origin/master)
@@ -8,8 +8,8 @@
 | Repo | Commit |
 |---|---|
 | BueloApi | `9ce9169` |
-| BueloWeb | `019cd18` |
-| umbrella | `ca3cef2` (+ this handoff bump) |
+| BueloWeb | `90bee41` |
+| umbrella | `b35cf2b` (+ this handoff bump) |
 
 Checks: **backend `dotnet test` 203/203 green (coverage ~77% line)**; frontend `pnpm typecheck` +
 `pnpm build` + `pnpm test:run` green (10 tests).
@@ -48,7 +48,9 @@ Persistence is **database-backed**. Recent work focused on editor UX, validation
 - **Close confirm** — closing a tab with unsaved changes prompts (Cancel / Don't save / Save).
 - **Tabs:** middle-click closes a tab (Chrome-like, still prompts if dirty); the tab strip **wraps to
   multiple rows** (VS-style, `max-h-32` then vertical scroll) instead of an overflow-x scrollbar that
-  pushed the Render/Validate buttons.
+  pushed the Render/Validate buttons. **Drag-to-reorder** tabs; an **open-editors "⌄" overflow menu**
+  (jump to any tab + **Save all**); **Save all** via **Ctrl/Cmd+K S** (plain Ctrl/Cmd+S saves the
+  active file).
 - **Validation noise removed:** the backend no longer emits a "No validator available" warning for
   unsupported extensions; YAML is validated client-side via monaco-yaml markers (real errors show in
   the status bar and the bottom-bar click jumps to them).
@@ -76,7 +78,7 @@ Persistence is **database-backed**. Recent work focused on editor UX, validation
   --settings coverlet.runsettings` (Cobertura); `coverlet.runsettings` excludes Program, EF
   migrations, the Postgres migrations assembly, and `[ExcludeFromCodeCoverage]`. ~77% line / 63% branch.
 - **Frontend:** Vitest + @vue/test-utils (happy-dom), `src/**/*.test.ts`; `pnpm test` / `test:run` /
-  `test:coverage` (v8). **39 tests / 12 files, ~20% lines** (was ~9%): services (validate/schema/
+  `test:coverage` (v8). **41 tests / 12 files, ~20% lines** (was ~9%): services (validate/schema/
   template), stores (reportStore render orchestration, templateStore CRUD), composables
   (useActiveTemplate dirty-baseline, useReportSettings, useOnboarding) + the showcase data. The
   remaining untested code is mostly Monaco-coupled `.vue` components (need the editor runtime →
@@ -92,24 +94,20 @@ Persistence is **database-backed**. Recent work focused on editor UX, validation
 
 ## Constraints / gotchas (don't trip on these)
 
-- **Do NOT bump `monaco-editor` past 0.54.x** — **re-verified live 2026-06-30** with the *latest*
-  `monaco-editor@0.55.1` + `monaco-yaml@5.5.1`: the YAML worker still fails with
-  `Cannot use 'in' operator to search for 'then' in undefined` because `monaco-worker-manager@2.0.1`
-  (a monaco-yaml dep, unchanged) still calls monaco's old `createWebWorker` API that 0.55 removed.
-  This breaks identically under **both** the plugin and the native `?worker` setup. Blocked **upstream** —
-  revisit when monaco-yaml updates monaco-worker-manager for monaco 0.55+.
-- **vite is stuck on major 6** — `vite-plugin-monaco-editor@1.1.0` (abandoned, patched for Node compat)
-  breaks on vite 7/8 **and** can't drive monaco 0.55. The native `?worker` migration was attempted and
-  **reverted**: on monaco 0.54 it fails in Vite **dev** with `module is not defined` (workers fall back
-  to the main thread → YAML validation dead); `worker.format:'es'` + `optimizeDeps` include/exclude
-  didn't help. **Important nuance (verified 2026-06-30):** the native `?worker` **build is clean** —
-  `pnpm build` emits proper ESM worker bundles (editor/json/yaml) with no top-level `module` refs, so
-  it's *production-viable*. The wall is **Vite 6 dev** specifically (it serves the workers' CJS deps
-  un-prebundled). A newer **Vite (7/8)** likely fixes the dev worker handling — but that requires
-  dropping the plugin in the same move (the plugin breaks on vite 7/8). So the realistic native path is
-  a combined "drop plugin + bump Vite + native workers" change (speculative, needs browser verification).
-  Net: both pins (monaco 0.54, vite 6) are currently load-bearing. A *maintained alternative* Vite-monaco
-  plugin (keeping monaco 0.54) could also unstick the vite pin — untried.
+- **Do NOT bump `monaco-editor` past 0.54.x** — **re-verified 2026-07-01** (registry): the *latest* is
+  still `monaco-editor@0.55.1` + `monaco-yaml@5.5.1`, and the blocking dep **`monaco-worker-manager@2.0.1`
+  is unchanged** — it still calls monaco's old `createWebWorker` API that 0.55 removed, so the YAML worker
+  breaks under 0.55. Blocked **upstream** — revisit only when monaco-yaml ships a fixed monaco-worker-manager.
+- **Vite is on major 7 with native `?worker` workers (the Vite-6 pin is GONE, 2026-07-01).** We dropped
+  the abandoned `vite-plugin-monaco-editor`; workers are wired in `src/lib/monaco/workerSetup.ts` via
+  native Vite `?worker` imports. The old **dev-mode wall is root-caused and fixed**: Vite dev serves
+  *module* workers and does **not** apply CJS→ESM interop to the worker dependency graph, so monaco-yaml's
+  `import * as path from 'path-browserify'` (CJS-only) threw `ReferenceError: module is not defined` inside
+  the worker → monaco fell back to the main thread → YAML tooling silently dead. **Fix:** alias
+  `path-browserify` → a vendored ESM shim (`src/lib/monaco/path-browserify.js`). `worker.format`/`optimizeDeps`
+  tweaks do **not** help (dev always uses module workers regardless of `worker.format`). Verified live in
+  the browser: YAML worker boots clean and an invalid `*.report.yml` surfaces YAML syntax markers **and**
+  schema markers from the API. Net: only the **monaco 0.54 pin** remains load-bearing.
 - **Commit & push policy:** green checks → commit + push, then bump the umbrella pointer. See umbrella
   `CLAUDE.md`.
 
@@ -120,12 +118,13 @@ Persistence is **database-backed**. Recent work focused on editor UX, validation
   created the database, seeding ran, and workspace + render-log read/write round-tripped (render-history
   returned the logged event). Provider via `Buelo:Database:Provider=postgres` +
   `Buelo:Database:ConnectionString` (env: `Buelo__Database__Provider` / `Buelo__Database__ConnectionString`).
-- **Optional editor polish (ideas, not committed work):** tab overflow "⌄" menu like VS, drag-to-reorder
-  tabs, "Save all" (Ctrl+K S).
-- **Monaco stack upgrade / plugin migration — BLOCKED upstream (investigated 2026-06-30).** See the
-  Constraints note: monaco 0.55 + monaco-yaml break (worker-manager not updated), native `?worker`
-  breaks on 0.54 in dev. Reverted; nothing committed. Re-attempt when monaco-yaml ships a fixed
-  monaco-worker-manager, or try a maintained alternative Vite-monaco plugin to unstick *just* the vite pin.
+- **Editor polish — DONE (2026-07-01).** Drag-to-reorder tabs, open-editors "⌄" overflow menu, and
+  "Save all" (Ctrl/Cmd+K S) are shipped. Remaining ideas (not done): drag files between folders in the
+  tree, "Save all" toolbar button, split-view.
+- **Monaco native-worker migration / Vite 7 — DONE (2026-07-01).** Dropped the abandoned plugin, native
+  `?worker` workers, Vite 6→7, dev + build both verified. See the Constraints note. **Still blocked
+  upstream: monaco 0.55** (worker-manager unchanged) — that's the only remaining Monaco pin. Nothing to
+  do there until monaco-yaml updates; re-check the registry periodically.
 
 ## How to run
 
