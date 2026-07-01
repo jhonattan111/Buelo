@@ -1,6 +1,9 @@
 # Buelo
 
-A **report creation** platform. The user writes a template in **C#** (a QuestPDF `IDocument` class), provides data in JSON, and the platform compiles the template at runtime and generates a **PDF** (or **Excel**).
+A **report creation** platform. Reports are authored either **declaratively in YAML** (the primary
+path — no code compilation) or as a **C#** `IDocument` class (the escape hatch, compiled at runtime
+with Roslyn). Either way, the user provides data in JSON and the platform generates a **PDF** (or
+**Excel**), rendered with QuestPDF.
 
 This is the **umbrella** repository: it aggregates the two components as **git submodules**.
 
@@ -50,6 +53,14 @@ Buelo/                  ← this repo (docs + submodule pointers)
 ├── dev.ps1            ← starts API + Web together
 └── README.md
 ```
+
+## Docs
+
+- [`docs/handoff.md`](docs/handoff.md) — current state of the product (read this first for what's done/pending).
+- [`docs/blueprint-schema-canonico.md`](docs/blueprint-schema-canonico.md) — original design rationale
+  for the declarative YAML engine. Mostly implemented; the live, maintained spec is
+  [`BueloApi/docs/reference/`](BueloApi/docs/reference/).
+- [`CLAUDE.md`](CLAUDE.md) — the canonical engineering doc, including how docs are organized across the three repos.
 
 ## Working in the submodules
 

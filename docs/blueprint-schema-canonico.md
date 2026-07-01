@@ -1,8 +1,16 @@
 # Blueprint — Canonical Schema of Declarative Buelo
 
-> **Design** document (no implementation code). Defines Buelo's declarative model, the `BueloDocument` IR it produces, and how everything fits into the **engine × recipe × extension** architecture (inspired by jsreport, with QuestPDF as the recipe).
+> **Historical design document** (no implementation code) — kept for the original rationale, not as
+> current reference. **The declarative engine described here is implemented and live.** For the
+> maintained, up-to-date spec (blocks, expressions, modules, examples), see
+> [`BueloApi/docs/reference/`](../BueloApi/docs/reference/). Component (§7) and validator (§8) design
+> have migrated there (`reference/modules.md`) and were removed from this file to avoid drift between
+> two copies.
 >
-> Status: **draft for discussion** · Date: 2026-06-26 · Scope: declarative engine (the C# engine is parallel, see §10).
+> Defines Buelo's declarative model, the `BueloDocument` IR it produces, and how everything fits into
+> the **engine × recipe × extension** architecture (inspired by jsreport, with QuestPDF as the recipe).
+>
+> Status: drafted 2026-06-26, **implemented** since. Scope: declarative engine (the C# engine is parallel, see §10).
 
 ---
 
@@ -200,60 +208,13 @@ Usage: `{{ sales.finalPrice }}` (with `item`/`data` in scope).
 
 ---
 
-## 7. Components (params + slots)
+## 7. Components (params + slots) & 8. Validators
 
-Reuse mechanism. Replaces OOP inheritance (today's abstract `LayoutPadrao`) with **composition**.
-
-```yaml
-kind: component
-name: defaultLayout
-params:
-  reportName:  { type: string }
-  companyName: { type: string, default: "Contar Consultoria e Contabilidade" }
-slots: [content]
-body:
-  page:
-    size: A4
-    margin: 24
-    header: { use: defaultHeader, company: "{{ companyName }}", report: "{{ reportName }}" }
-    content: { slot: content }            # report injection point
-    footer:  { use: defaultFooter, company: "{{ companyName }}" }
-```
-
-- **Scope (recommended decision):** explicit params + **minimal** ambient context (`now`, `page`, `pageCount`). The component does **not** see the report's `data` unless it's received via `with`. Hygiene = safe reuse.
-- **Slots:** one or more named points; the report fills them via `content:` (default slot) or `slots: { name: [...] }`.
-- **Nesting:** components use components (`defaultHeader` above).
-
----
-
-## 8. Validators (the extensibility ladder)
-
-```yaml
-kind: validator
-name: cpf
-# Step 1 — declarative (format + common checksum)
-format: "###.###.###-##"
-rules:
-  - { digits: 11 }
-  - { checksum: { scheme: mod11, weights: [10,9,8,7,6,5,4,3,2] } }
-```
-
-```yaml
-kind: validator
-name: steuerId
-# Step 2 — pure expression (check-digit that fits in a reduce)
-expr: "{{ len(digits(id)) == 11 && checkDigit(digits(id)) == last(digits(id)) }}"
-params: [id]
-```
-
-```yaml
-kind: validator
-name: steuerIdComplex
-# Step 3 — reference to a registered C# extension (self-hosted)
-ref: GermanHelpers.ValidateSteuerId
-```
-
-Usage in data/fields: `validate: cpf` on a column or binding. Steps 1–2 are safe to share in the global registry; step 3 (code) only enters via local registry/extension.
+Design superseded by the implementation — see
+[`BueloApi/docs/reference/modules.md`](../BueloApi/docs/reference/modules.md) for the current
+`kind: component` (params/slots/body) and `kind: validator` (3-tier: declarative/expression/C#
+reference) shapes, which follow the composition-over-inheritance and escalating-tiers approach
+outlined here.
 
 ---
 
@@ -331,7 +292,11 @@ Each `kind` gets a **JSON Schema**. On the frontend, `monaco-yaml` + that schema
 
 ---
 
-## 13. Persistence (decided 2026-06-26, fork resolved 2026-06-28)
+## 13. Persistence (decided 2026-06-26, fork resolved 2026-06-28) — implemented
+
+> **Implemented 2026-06-30** as designed below: `Buelo.Persistence` (EF Core, SQLite default) +
+> `Buelo.Persistence.Postgres`. See [`BueloApi/CLAUDE.md`](../BueloApi/CLAUDE.md)'s "Declarative engine"
+> section for the current persistence model and config keys.
 
 **Decision: everything pluggable, but along TWO different AXES** — because definitions and operational data have distinct paradigms.
 
