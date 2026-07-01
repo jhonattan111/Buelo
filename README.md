@@ -57,9 +57,7 @@ Buelo/                  ← this repo (docs + submodule pointers)
 ## Docs
 
 - [`docs/handoff.md`](docs/handoff.md) — current state of the product (read this first for what's done/pending).
-- [`docs/blueprint-schema-canonico.md`](docs/blueprint-schema-canonico.md) — original design rationale
-  for the declarative YAML engine. Mostly implemented; the live, maintained spec is
-  [`BueloApi/docs/reference/`](BueloApi/docs/reference/).
+- [`BueloApi/docs/reference/`](BueloApi/docs/reference/) — the declarative YAML engine's spec, one file per component.
 - [`CLAUDE.md`](CLAUDE.md) — the canonical engineering doc, including how docs are organized across the three repos.
 
 ## Working in the submodules

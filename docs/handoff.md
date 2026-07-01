@@ -129,8 +129,12 @@ Closed this session (2026-07-01):
   to add an endpoint/block/stdlib fn/store/migration). All 42 sprint files (18 BueloApi + 24 BueloWeb)
   standardized onto one Goal/Status/Dependencies/Scope/Notes template; both `sprint-history.md`
   index files had their stale "DSL removed, pure C#" framing corrected. The umbrella's
-  `blueprint-schema-canonico.md` is trimmed (components/validators design moved to
-  `BueloApi/docs/reference/modules.md`) and banner-marked as historical/implemented.
+  `docs/blueprint-schema-canonico.md` was first trimmed, then **deleted outright**: on review the
+  surviving sections still had implementation-diverged examples (`data:`/`meta.engine` fields that
+  don't exist, bands nested under a `page:` key instead of top-level, `chart` listed as core-v1 despite
+  being deferred to v2 and never built, stdlib functions not found in `ExpressionFunctions.cs`) — kept
+  as "historical reference" they'd actively mislead. Everything accurate had already migrated to
+  `BueloApi/docs/reference/`; the original design doc lives on in git history if ever needed.
 
 Nothing else outstanding; next open items will land here as they come up.
 

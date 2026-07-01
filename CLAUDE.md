@@ -36,10 +36,11 @@ Applies to this repo and both submodules — where new content goes:
 - **`CLAUDE.md`** — the canonical engineering doc per repo, for agents. Architecture, conventions,
   "how to do X", commands, config, commit policy. **Wins on conflict** with anything in `docs/`.
 - **`docs/`** — supporting material that doesn't fit either of the above: reference material too deep
-  for `CLAUDE.md` (organized by component/topic, e.g. `BueloApi/docs/reference/`), the sprint history
-  (standardized format, explicitly historical — not current state), and point-in-time design docs (e.g.
-  `docs/blueprint-schema-canonico.md`). **Obsolete docs are deleted, not accumulated** — git history is
-  the record; don't leave contradictory old docs lying around.
+  for `CLAUDE.md` (organized by component/topic, e.g. `BueloApi/docs/reference/`) and the sprint history
+  (standardized format, explicitly historical — not current state). **Obsolete docs are deleted, not
+  accumulated** — git history is the record; don't leave contradictory old docs lying around. A
+  point-in-time design doc earns its keep only as long as it stays accurate — once its content has
+  fully migrated to a maintained reference, delete it rather than keeping a second, drifting copy.
 
 `docs/handoff.md` is the exception: it's the living "current state" doc for the whole product (updated
 every session), read alongside each repo's `CLAUDE.md`.
@@ -107,6 +108,7 @@ docker compose up -d --build  # builds the API + web images, starts Postgres
 
 - Each repo has its own `CLAUDE.md` as the source of truth — see [Documentation conventions](#documentation-conventions) above.
 - The AI config was migrated from Copilot (`ai/*.instructions.md` with `applyTo`) to the Claude Code standard (`CLAUDE.md` + `.claude/`).
-- This repo's own docs: [`docs/handoff.md`](docs/handoff.md) (current state, read first) and
-  [`docs/blueprint-schema-canonico.md`](docs/blueprint-schema-canonico.md) (original design rationale
-  for the declarative engine — mostly implemented; see `BueloApi/docs/reference/` for the live spec).
+- This repo's own doc: [`docs/handoff.md`](docs/handoff.md) (current state, read first). The
+  declarative engine's design doc (`docs/blueprint-schema-canonico.md`) was deleted once its content
+  fully migrated to the maintained [`BueloApi/docs/reference/`](BueloApi/docs/reference/) — see it in
+  git history if the original design rationale is ever needed.
